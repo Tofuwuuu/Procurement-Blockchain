@@ -25,6 +25,8 @@ database.init().then(() => {
   console.log('✅ Database initialized');
 }).catch(error => {
   console.error('❌ Database initialization failed:', error);
+  console.error('❌ Exiting because database is required to run the API.');
+  process.exit(1);
 });
 
 // In-memory storage for suppliers (temporary solution)
