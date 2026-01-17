@@ -1,6 +1,6 @@
 class Config:
     SECRET_KEY = "dev-secret-key"
-    COMPANY_NAME = "Philippine Procurement Solutions"
+    COMPANY_NAME = "PAMS"
     COMPANY_ADDRESS = "123 Ayala Avenue, Makati City, Philippines"
     BIR_TIN = "123-456-789-000"
     BLOCKCHAIN_NODE_URL = "http://localhost:5001"

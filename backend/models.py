@@ -15,6 +15,18 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     user: Optional[dict] = None
 
+# User response model (matching frontend User interface)
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    full_name: str
+    position: str
+    department: str
+    role: str
+    is_admin: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
 # User model (for database)
 class User(BaseModel):
     username: str

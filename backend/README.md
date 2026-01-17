@@ -45,19 +45,19 @@ python main.py
 
 Or using uvicorn directly:
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 3003
 ```
 
 ### Production Mode
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 3003
 ```
 
 ## API Documentation
 
 Once the server is running, you can access:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:3003/docs
+- **ReDoc**: http://localhost:3003/redoc
 
 ## Endpoints
 
@@ -76,7 +76,7 @@ Once the server is running, you can access:
 
 ```bash
 # Login request
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://localhost:3003/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "admin123"}'
 
@@ -96,7 +96,11 @@ curl -X POST http://localhost:8000/api/auth/login \
 }
 
 # Using the token:
-curl -X GET http://localhost:8000/api/auth/verify \
+curl -X GET http://localhost:3003/api/auth/verify \
+  -H "Authorization: Bearer <your-access-token>"
+
+# Get current user:
+curl -X GET http://localhost:3003/api/auth/me \
   -H "Authorization: Bearer <your-access-token>"
 ```
 

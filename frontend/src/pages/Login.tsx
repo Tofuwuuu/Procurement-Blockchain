@@ -201,7 +201,7 @@ const Login: React.FC = () => {
                   <div className="ph-logo-container mb-3">
                     <i className="bi bi-shield-check ph-logo-icon" aria-hidden="true"></i>
                   </div>
-                  <h1 className="company-title mb-2">Philippine Procurement Solutions</h1>
+                  <h1 className="company-title mb-2">PAMS</h1>
                   <p className="text-muted mb-0 ph-subtitle">
                     Philippine-Compliant Procurement Management
                   </p>

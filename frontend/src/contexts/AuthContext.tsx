@@ -66,15 +66,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await apiService.login({ username, password });
       console.log('✅ Login API response:', response);
       
-      // Store the token
-      localStorage.setItem('authToken', response.token);
-      console.log('💾 Token stored in localStorage');
+      // Store the token - backend returns 'access_token', not 'token'
+      const token = response.access_token || response.token;
+      if (token) {
+        localStorage.setItem('authToken', token);
+        console.log('💾 Token stored in localStorage');
+      } else {
+        console.error('❌ No token received from login response');
+        throw new Error('No authentication token received');
+      }
       
       // Set the user data
-      setUser(response.user);
-      console.log('👤 User state updated:', response.user);
-      
-      console.log('🎉 Login successful:', response.user.username);
+      if (response.user) {
+        setUser(response.user);
+        console.log('👤 User state updated:', response.user);
+        console.log('🎉 Login successful:', response.user.username);
+      } else {
+        console.error('❌ No user data received from login response');
+        throw new Error('No user data received');
+      }
     } catch (error) {
       console.error('❌ Login failed:', error);
       throw error; // Re-throw to let the component handle the error

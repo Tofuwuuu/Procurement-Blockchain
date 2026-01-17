@@ -46,12 +46,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <Navbar.Brand as={Link} to="/dashboard" className="d-flex align-items-center">
               <img 
                 src={logo} 
-                alt="Philippine Procurement Solutions" 
+                alt="PAMS" 
                 height="40" 
                 className="me-3"
-                style={{ filter: 'brightness(0) invert(1)' }}
               />
-              <span className="fw-bold fs-5">Philippine Procurement Solutions</span>
+              <span className="fw-bold fs-5">PAMS</span>
             </Navbar.Brand>
             
             <Navbar.Toggle aria-controls="main-nav" />
@@ -67,6 +66,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 >
                   <i className="bi bi-grid-1x2 me-2"></i>
                   Dashboard
+                </Nav.Link>
+                
+                {/* Purchase Request - Available to all authenticated users */}
+                <Nav.Link 
+                  as={Link} 
+                  to="/purchase-request" 
+                  active={isActive('/purchase-request')}
+                  className="d-flex align-items-center nav-item-custom"
+                >
+                  <i className="bi bi-file-earmark-plus me-2"></i>
+                  Purchase Request
                 </Nav.Link>
                 
                 {/* Procurement-specific navigation - Only for procurement users */}
