@@ -144,10 +144,13 @@ export class Blockchain extends EventEmitter {
   async loadFromFile(filename) {
     try {
       const data = await fs.readFile(filename, 'utf8');
-      this.chain = JSON.parse(data);
+      // Remove BOM (Byte Order Mark) if present
+      const cleanedData = data.replace(/^\uFEFF/, '');
+      this.chain = JSON.parse(cleanedData);
       console.log(`Blockchain loaded from ${filename}`);
     } catch (error) {
       console.error('Error loading blockchain:', error);
+      throw error;
     }
   }
 }
