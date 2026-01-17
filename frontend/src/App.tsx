@@ -152,6 +152,17 @@ function App() {
         />
 
         <Route
+          path="/purchase-request"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Orders />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/purchase-requests"
           element={
             <ProtectedRoute>
