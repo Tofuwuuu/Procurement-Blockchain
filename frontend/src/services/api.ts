@@ -521,6 +521,11 @@ export const apiService = {
     return response.data;
   },
 
+  updatePurchaseRequest: async (id: string, data: Partial<PurchaseRequest>): Promise<PurchaseRequest> => {
+    const response = await api.put(`/api/purchase-requests/${id}`, data);
+    return response.data;
+  },
+
   createPurchaseRequest: async (data: CreatePurchaseRequestData): Promise<PurchaseRequest> => {
     const response = await api.post('/api/purchase-requests', data);
     return response.data;

@@ -264,6 +264,48 @@ const Orders: React.FC = () => {
     items?: string;
   }>({});
 
+  // Convert purchase requests (from backend) into the purchase order shape
+  const mapPurchaseRequestsToOrders = (purchaseRequests: PurchaseRequest[]): PurchaseOrder[] => {
+    return purchaseRequests.map((pr: PurchaseRequest) => ({
+      id: parseInt(pr.id) || hashString(pr.id),
+      po_number: pr.pr_number,
+      supplier_id: 0,
+      supplier: {
+        id: 0,
+        name: pr.entity_name || pr.requested_by || 'N/A',
+        address: '',
+        province: '',
+        contact_person: '',
+        phone: '',
+        bir_tin: '',
+        is_active: true,
+        created_at: pr.date_created,
+        updated_at: pr.date_updated || pr.date_created
+      },
+      delivery_address: pr.office_section,
+      notes: pr.remark || '',
+      status: pr.status === 'Pending' ? 'Pending' : pr.status === 'Approved' ? 'Approved' : 'Draft',
+      total_amount: pr.total_amount,
+      date_created: pr.date_created,
+      date_updated: pr.date_updated || pr.date_created,
+      items: pr.items.map((item, index) => ({
+        id: index + 1,
+        product_id: index + 1,
+        product: {
+          id: index + 1,
+          name: item.item_description,
+          unit: item.unit,
+          unit_price: item.unit_cost,
+          category: '',
+          is_active: true
+        },
+        quantity: item.quantity,
+        unit_price: item.unit_cost,
+        total_price: item.total_cost
+      }))
+    }));
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -292,44 +334,7 @@ const Orders: React.FC = () => {
           const purchaseRequests = await apiService.getPurchaseRequests(true);
           console.log('✅ Fetched purchase requests:', purchaseRequests);
           // Convert purchase requests to purchase orders format for display
-          const convertedOrders: PurchaseOrder[] = purchaseRequests.map((pr: PurchaseRequest) => ({
-            id: parseInt(pr.id) || hashString(pr.id),
-            po_number: pr.pr_number,
-            supplier_id: 0,
-            supplier: {
-              id: 0,
-              name: pr.entity_name,
-              address: '',
-              province: '',
-              contact_person: '',
-              phone: '',
-              bir_tin: '',
-              is_active: true,
-              created_at: pr.date_created,
-              updated_at: pr.date_updated || pr.date_created
-            },
-            delivery_address: pr.office_section,
-            notes: pr.remark || '',
-            status: pr.status === 'Pending' ? 'Pending' : pr.status === 'Approved' ? 'Approved' : 'Draft',
-            total_amount: pr.total_amount,
-            date_created: pr.date_created,
-            date_updated: pr.date_updated || pr.date_created,
-            items: pr.items.map((item, index) => ({
-              id: index + 1,
-              product_id: index + 1,
-              product: {
-                id: index + 1,
-                name: item.item_description,
-                unit: item.unit,
-                unit_price: item.unit_cost,
-                category: '',
-                is_active: true
-              },
-              quantity: item.quantity,
-              unit_price: item.unit_cost,
-              total_price: item.total_cost
-            }))
-          }));
+          const convertedOrders: PurchaseOrder[] = mapPurchaseRequestsToOrders(purchaseRequests);
           setOrders(convertedOrders);
           setUsingMockData(false);
         } else {

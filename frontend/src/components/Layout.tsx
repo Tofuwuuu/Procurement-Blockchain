@@ -68,8 +68,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   Dashboard
                 </Nav.Link>
                 
-                {/* Purchase Request - Available to all authenticated users except custodian and inspector */}
-                {user?.role !== 'custodian' && user?.role !== 'inspector' && (
+                {/* Purchase Request - Available to all authenticated users except custodian, inspector, and canvasser (they have their own link) */}
+                {user?.role !== 'custodian' && user?.role !== 'inspector' && user?.role !== 'canvasser' && (
                   <Nav.Link 
                     as={Link} 
                     to="/purchase-request" 
@@ -299,6 +299,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 {/* Canvasser role - abstract of canvass and purchase order */}
                 {user?.role === 'canvasser' && !user?.is_admin && (
                   <>
+                    <Nav.Link 
+                      as={Link} 
+                      to="/purchase-request-canvasser" 
+                      active={isActive('/purchase-request-canvasser')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-file-earmark-plus me-2"></i>
+                      Purchase Request (Canvasser)
+                    </Nav.Link>
+
                     <Nav.Link 
                       as={Link} 
                       to="/abstract-of-canvass" 

@@ -11,6 +11,8 @@ import OrderDetail from './pages/OrderDetail';
 import Inventory from './pages/Inventory';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
+import AbstractOfCanvass from './pages/AbstractOfCanvass';
+import PurchaseRequestCanvasser from './pages/PurchaseRequestCanvasser';
 import Login from './pages/Login';
 import ItemManagement from './pages/ItemManagement';
 import AuditLogs from './pages/AuditLogs';
@@ -142,6 +144,42 @@ function App() {
 
         <Route
           path="/orders"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Orders />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Canvasser - Purchase Request */}
+        <Route
+          path="/purchase-request-canvasser"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PurchaseRequestCanvasser />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Canvasser - Abstract of Canvass */}
+        <Route
+          path="/abstract-of-canvass"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AbstractOfCanvass />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Canvasser - Purchase Order (reuse Orders view) */}
+        <Route
+          path="/purchase-order"
           element={
             <ProtectedRoute>
               <Layout>
