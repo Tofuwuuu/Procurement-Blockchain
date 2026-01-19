@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -8,8 +8,10 @@ import os
 
 # Import local modules
 from database import connect_to_mongo, close_mongo_connection, get_database
-from models import LoginRequest, LoginResponse
+from models import LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse
 from auth import verify_password, create_access_token, decode_access_token
+from datetime import datetime, timezone
+from typing import List
 
 # Create FastAPI instance
 app = FastAPI(
@@ -284,6 +286,244 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             "role": payload.get("role")
         }
     }
+
+# Helper function to generate PR number
+async def generate_pr_number() -> str:
+    """Generate a unique PR number in format PR-YYYY-XXX"""
+    db = await get_database()
+    counters_collection = db.counters
+    year = datetime.now().year
+    
+    try:
+        # Get or increment counter for this year
+        counter = await counters_collection.find_one_and_update(
+            {"_id": f"pr_{year}"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        seq = counter.get("seq", 1)
+        return f"PR-{year}-{str(seq).zfill(3)}"
+    except Exception as e:
+        print(f"Error generating PR number: {e}")
+        # Fallback: use timestamp
+        timestamp = int(datetime.now().timestamp())
+        return f"PR-{year}-{str(timestamp % 1000).zfill(3)}"
+
+# Create Purchase Request endpoint
+@app.post("/api/purchase-requests", response_model=PurchaseRequestResponse)
+async def create_purchase_request(
+    request: CreatePurchaseRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new purchase request"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        users_collection = db.users
+        
+        # Get user information
+        user = await users_collection.find_one({"username": payload.get("sub")})
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user_id = str(user.get("_id")) if user.get("_id") else str(user.get("id", ""))
+        requested_by = user.get("full_name") or user.get("username") or request.entity_name
+        
+        # Generate PR number
+        pr_number = await generate_pr_number()
+        
+        # Calculate total amount
+        total_amount = sum(item.total_cost for item in request.items)
+        
+        # Create purchase request document
+        pr_doc = {
+            "pr_number": pr_number,
+            "entity_name": request.entity_name,
+            "fund_cluster": request.fund_cluster or "",
+            "office_section": request.office_section,
+            "responsibility_center_code": request.responsibility_center_code or "",
+            "date": request.date,
+            "remark": request.remark or "",
+            "status": "Pending",
+            "requested_by": requested_by,
+            "requested_by_id": user_id,
+            "items": [item.dict() for item in request.items],
+            "total_amount": total_amount,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": None
+        }
+        
+        # Insert purchase request
+        print(f"💾 Saving purchase request to MongoDB: {pr_doc}")
+        result = await purchase_requests_collection.insert_one(pr_doc)
+        
+        if result.inserted_id:
+            pr_doc["id"] = str(result.inserted_id)
+            print(f"✅ Purchase request saved successfully with ID: {result.inserted_id}")
+            return PurchaseRequestResponse(**pr_doc)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create purchase request"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Create purchase request error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Get all Purchase Requests endpoint
+# Note: This route must come before the /{pr_id} route to avoid path conflicts
+@app.get("/api/purchase-requests", response_model=List[PurchaseRequestResponse])
+async def get_purchase_requests(
+    user_only: bool = Query(False),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all purchase requests, optionally filtered by current user"""
+    try:
+        print(f"📥 GET /api/purchase-requests called with user_only={user_only}")
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            print("❌ Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        print(f"✅ Token validated for user: {payload.get('sub')}")
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        
+        # Build query
+        query = {}
+        if user_only:
+            users_collection = db.users
+            user = await users_collection.find_one({"username": payload.get("sub")})
+            if user:
+                user_id = str(user.get("_id")) if user.get("_id") else str(user.get("id", ""))
+                query["requested_by_id"] = user_id
+                print(f"🔍 Filtering by user_id: {user_id}")
+            else:
+                print(f"⚠️ User not found: {payload.get('sub')}")
+        
+        print(f"📊 MongoDB query: {query}")
+        # Fetch purchase requests
+        cursor = purchase_requests_collection.find(query).sort("date_created", -1)
+        requests = await cursor.to_list(length=None)
+        print(f"✅ Found {len(requests)} purchase requests")
+        
+        # Convert to response format
+        result = []
+        for req in requests:
+            req["id"] = str(req["_id"])
+            result.append(PurchaseRequestResponse(**req))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Get purchase requests error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Get single Purchase Request endpoint
+@app.get("/api/purchase-requests/{pr_id}", response_model=PurchaseRequestResponse)
+async def get_purchase_request(
+    pr_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific purchase request by ID"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        
+        from bson import ObjectId
+        try:
+            pr = await purchase_requests_collection.find_one({"_id": ObjectId(pr_id)})
+        except:
+            # Try by PR number if ObjectId fails
+            pr = await purchase_requests_collection.find_one({"pr_number": pr_id})
+        
+        if not pr:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Purchase request not found"
+            )
+        
+        pr["id"] = str(pr["_id"])
+        return PurchaseRequestResponse(**pr)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Get purchase request error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Test endpoint to verify purchase requests collection exists
+@app.get("/api/test-purchase-requests")
+async def test_purchase_requests_endpoint():
+    """Test endpoint to verify MongoDB connection and purchase_requests collection"""
+    try:
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        
+        # Count documents
+        count = await purchase_requests_collection.count_documents({})
+        
+        return {
+            "message": "Purchase requests collection accessible",
+            "collection": "purchase_requests",
+            "document_count": count,
+            "database": db.name
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "message": "Failed to access purchase_requests collection"
+        }
 
 # Example API endpoint
 @app.get("/api/test")

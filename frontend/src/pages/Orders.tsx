@@ -4,7 +4,7 @@ import {
   Container, Row, Col, Card, Table, Button, Badge, 
   Form, Modal, Alert, Spinner, InputGroup 
 } from 'react-bootstrap';
-import { apiService, PurchaseOrder, CreateOrderData, Supplier, Product } from '../services/api';
+import { apiService, PurchaseOrder, CreateOrderData, Supplier, Product, PurchaseRequest, CreatePurchaseRequestData } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
@@ -228,6 +228,8 @@ const Orders: React.FC = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [searchTerm, setSearchTerm] = useState('');
   const [usingMockData, setUsingMockData] = useState(false);
+  const [showItemsModal, setShowItemsModal] = useState(false);
+  const [selectedRequestItems, setSelectedRequestItems] = useState<any[]>([]);
 
   // Form state
   const [formData, setFormData] = useState<CreateOrderData>({
@@ -235,6 +237,23 @@ const Orders: React.FC = () => {
     delivery_address: '',
     notes: '',
     items: []
+  });
+
+  // Employee purchase request form state
+  const [employeeFormData, setEmployeeFormData] = useState({
+    entity_name: user?.full_name || user?.username || '',
+    fund_cluster: '',
+    office_section: user?.department || '',
+    responsibility_center_code: '',
+    date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).replace(/\//g, '/'),
+    remark: '',
+    items: Array(4).fill(null).map(() => ({
+      unit: '',
+      item_description: '',
+      quantity: 0,
+      unit_cost: 0.0,
+      total_cost: 0.0
+    }))
   });
 
   // Form validation
@@ -249,23 +268,84 @@ const Orders: React.FC = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    // Update employee form data when user changes
+    if (user) {
+      setEmployeeFormData({
+        ...employeeFormData,
+        entity_name: user.full_name || user.username || '',
+        office_section: user.department || '',
+        date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).replace(/\//g, '/')
+      });
+    }
+  }, [user]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
       
       // Try to fetch from API first
       try {
-        const [ordersData, suppliersData, productsData] = await Promise.all([
-          apiService.getOrders(),
-          apiService.getSuppliers(),
-          apiService.getProducts()
-        ]);
-        setOrders(ordersData);
-        setSuppliers(suppliersData);
-        setProducts(productsData);
-        setUsingMockData(false);
+        if (user?.role === 'employee') {
+          // For employees, fetch purchase requests
+          console.log('📥 Fetching purchase requests for employee...');
+          const purchaseRequests = await apiService.getPurchaseRequests(true);
+          console.log('✅ Fetched purchase requests:', purchaseRequests);
+          // Convert purchase requests to purchase orders format for display
+          const convertedOrders: PurchaseOrder[] = purchaseRequests.map((pr: PurchaseRequest) => ({
+            id: parseInt(pr.id) || hashString(pr.id),
+            po_number: pr.pr_number,
+            supplier_id: 0,
+            supplier: {
+              id: 0,
+              name: pr.entity_name,
+              address: '',
+              province: '',
+              contact_person: '',
+              phone: '',
+              bir_tin: '',
+              is_active: true,
+              created_at: pr.date_created,
+              updated_at: pr.date_updated || pr.date_created
+            },
+            delivery_address: pr.office_section,
+            notes: pr.remark || '',
+            status: pr.status === 'Pending' ? 'Pending' : pr.status === 'Approved' ? 'Approved' : 'Draft',
+            total_amount: pr.total_amount,
+            date_created: pr.date_created,
+            date_updated: pr.date_updated || pr.date_created,
+            items: pr.items.map((item, index) => ({
+              id: index + 1,
+              product_id: index + 1,
+              product: {
+                id: index + 1,
+                name: item.item_description,
+                unit: item.unit,
+                unit_price: item.unit_cost,
+                category: '',
+                is_active: true
+              },
+              quantity: item.quantity,
+              unit_price: item.unit_cost,
+              total_price: item.total_cost
+            }))
+          }));
+          setOrders(convertedOrders);
+          setUsingMockData(false);
+        } else {
+          // For other roles, fetch purchase orders
+          const [ordersData, suppliersData, productsData] = await Promise.all([
+            apiService.getOrders(),
+            apiService.getSuppliers(),
+            apiService.getProducts()
+          ]);
+          setOrders(ordersData);
+          setSuppliers(suppliersData);
+          setProducts(productsData);
+          setUsingMockData(false);
+        }
       } catch (apiError) {
-        console.log('API not available, using mock data...');
+        console.log('API not available, using mock data...', apiError);
         // Use mock data if API fails
         setOrders(mockOrders);
         setSuppliers(mockSuppliers);
@@ -286,6 +366,17 @@ const Orders: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to hash string to number
+  const hashString = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
   };
 
   const validateForm = (): boolean => {
@@ -315,6 +406,84 @@ const Orders: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Handle employee purchase request form
+    if (user?.role === 'employee') {
+      try {
+        // Calculate total from employee form items
+        const totalAmount = employeeFormData.items.reduce((sum, item) => sum + item.total_cost, 0);
+        
+        // Prepare purchase request data
+        const purchaseRequestData: CreatePurchaseRequestData = {
+          entity_name: employeeFormData.entity_name,
+          fund_cluster: employeeFormData.fund_cluster,
+          office_section: employeeFormData.office_section,
+          responsibility_center_code: employeeFormData.responsibility_center_code,
+          date: employeeFormData.date,
+          remark: employeeFormData.remark || employeeFormData.fund_cluster || 'No remarks',
+          items: employeeFormData.items
+            .filter(item => item.item_description && item.quantity > 0)
+            .map(item => ({
+              unit: item.unit,
+              item_description: item.item_description,
+              quantity: item.quantity,
+              unit_cost: item.unit_cost,
+              total_cost: item.total_cost
+            }))
+        };
+
+        if (usingMockData) {
+          // Simulate API call for mock data
+          const year = new Date().getFullYear();
+          const prCount = orders.filter(o => o.po_number.startsWith(`PR-${year}-`)).length + 1;
+          const prNumber = `PR-${year}-${String(prCount).padStart(3, '0')}`;
+          
+          const newOrder: PurchaseOrder = {
+            id: orders.length + 1,
+            po_number: prNumber,
+            supplier_id: 0,
+            supplier: { id: 0, name: employeeFormData.entity_name, address: '', province: '', contact_person: '', phone: '', bir_tin: '', is_active: true, created_at: '', updated_at: '' },
+            delivery_address: employeeFormData.office_section,
+            notes: employeeFormData.fund_cluster || 'No remarks',
+            status: 'Pending',
+            total_amount: totalAmount,
+            date_created: new Date().toISOString(),
+            date_updated: new Date().toISOString(),
+            items: purchaseRequestData.items.map((item, index) => ({
+              id: index + 1,
+              product_id: index + 1,
+              product: { id: index + 1, name: item.item_description, unit: item.unit, unit_price: item.unit_cost, category: '', is_active: true },
+              quantity: item.quantity,
+              unit_price: item.unit_cost,
+              total_price: item.total_cost
+            }))
+          };
+
+          setOrders([...orders, newOrder]);
+          setToastMessage('Purchase request submitted successfully (Demo)');
+        } else {
+          // Real API call - save to purchase_requests collection
+          console.log('📤 Submitting purchase request to backend:', purchaseRequestData);
+          const createdPR = await apiService.createPurchaseRequest(purchaseRequestData);
+          console.log('✅ Purchase request created successfully:', createdPR);
+          setToastMessage('Purchase request submitted successfully');
+          // Refresh the list to show the new request
+          await fetchData();
+        }
+        
+        setToastType('success');
+        setShowToast(true);
+        setShowModal(false);
+        resetForm();
+      } catch (error: any) {
+        console.error('Failed to submit purchase request:', error);
+        setToastMessage(error.response?.data?.message || 'Failed to submit purchase request');
+        setToastType('error');
+        setShowToast(true);
+      }
+      return;
+    }
+    
+    // Original form validation and submission for non-employee roles
     if (!validateForm()) return;
 
     try {
@@ -445,6 +614,21 @@ const Orders: React.FC = () => {
       notes: '',
       items: []
     });
+    setEmployeeFormData({
+      entity_name: user?.full_name || user?.username || '',
+      fund_cluster: '',
+      office_section: user?.department || '',
+      responsibility_center_code: '',
+      date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).replace(/\//g, '/'),
+      remark: '',
+      items: Array(4).fill(null).map(() => ({
+        unit: '',
+        item_description: '',
+        quantity: 0,
+        unit_cost: 0.0,
+        total_cost: 0.0
+      }))
+    });
     setErrors({});
     setEditingOrder(null);
   };
@@ -508,12 +692,14 @@ const Orders: React.FC = () => {
         <Col>
           <div className="d-flex justify-content-between align-items-center">
             <div>
-              <h1 className="h2 mb-1">Purchase Orders</h1>
+              <h1 className="h2 mb-1">
+                {user?.role === 'employee' ? 'Purchase Requests' : 'Purchase Orders'}
+              </h1>
               <p className="text-muted mb-0">
-                Manage purchase orders and track procurement activities
-                {usingMockData && (
-                  <span className="ms-2 badge bg-warning text-dark">Demo Mode</span>
-                )}
+                {user?.role === 'employee' 
+                  ? 'Manage purchase requests and track procurement activities'
+                  : 'Manage purchase orders and track procurement activities'
+                }
               </p>
             </div>
             <Button 
@@ -522,170 +708,442 @@ const Orders: React.FC = () => {
               aria-label="Create new purchase order"
             >
               <i className="bi bi-plus-circle me-2"></i>
-              New Order
+              {user?.role === 'employee' ? 'New Request' : 'New Order'}
             </Button>
           </div>
         </Col>
       </Row>
 
-      {/* Search */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <InputGroup>
-            <InputGroup.Text>
-              <i className="bi bi-search"></i>
-            </InputGroup.Text>
-            <Form.Control
-              type="text"
-              placeholder="Search orders..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search orders"
-            />
-          </InputGroup>
-        </Col>
-      </Row>
-
-      {/* Orders Table */}
-      <Card>
-        <Card.Header>
-          <h5 className="mb-0">Purchase Orders</h5>
-        </Card.Header>
-        <Card.Body className="p-0">
-          {filteredOrders.length > 0 ? (
+      {/* Employee Purchase Request List */}
+      {user?.role === 'employee' ? (
+        <Card>
+          <Card.Body className="p-0">
             <div className="table-responsive">
               <Table striped bordered className="mb-0">
-                <thead>
+                <thead className="bg-light">
                   <tr>
-                    <th>PO Number</th>
-                    <th>Supplier</th>
-                    <th>Date Created</th>
-                    <th>Status</th>
-                    <th>Total Amount</th>
-                    <th>Actions</th>
+                    <th>
+                      STATUS
+                      <i className="bi bi-arrow-up-down ms-2"></i>
+                    </th>
+                    <th>
+                      DATE REQUESTED
+                      <i className="bi bi-arrow-up-down ms-2"></i>
+                    </th>
+                    <th>
+                      REQUESTED BY
+                      <i className="bi bi-arrow-up-down ms-2"></i>
+                    </th>
+                    <th>
+                      P.R. NUMBER
+                      <i className="bi bi-arrow-up-down ms-2"></i>
+                    </th>
+                    <th>
+                      REMARK
+                      <i className="bi bi-arrow-up-down ms-2"></i>
+                    </th>
+                    <th>DETAILS</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order) => (
-                    <tr key={order.id}>
-                      <td>
-                        <strong>{order.po_number}</strong>
-                      </td>
-                      <td>{order.supplier.name}</td>
-                      <td>{formatDate(order.date_created)}</td>
-                      <td>{getStatusBadge(order.status)}</td>
-                      <td>
-                        <strong>{formatCurrency(order.total_amount)}</strong>
-                      </td>
-                      <td>
-                        <div className="d-flex gap-1">
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            onClick={() => navigate(`/orders/${order.id}`)}
-                            aria-label={`View ${order.po_number}`}
-                          >
-                            <i className="bi bi-eye"></i>
-                          </Button>
-                          {order.status === 'Draft' && (
+                  {orders
+                    .filter(order => order.po_number.startsWith('PR-') || user?.role === 'employee')
+                    .map((order) => {
+                      // Determine status based on order status
+                      let statusBadge = <Badge bg="warning">Pending</Badge>;
+                      if (order.status === 'Approved') {
+                        statusBadge = <Badge bg="success">Approved</Badge>;
+                      } else if (order.status === 'Draft' || order.status === 'Pending') {
+                        statusBadge = <Badge bg="warning">Pending</Badge>;
+                      } else if (order.status === 'Completed') {
+                        statusBadge = <Badge bg="info">For Canvass</Badge>;
+                      }
+                      
+                      // Format date as YYYY-MM-DD
+                      const dateRequested = new Date(order.date_created).toISOString().split('T')[0];
+                      
+                      // P.R. Number - use po_number if it starts with PR, otherwise N/A
+                      const prNumber = order.po_number.startsWith('PR-') ? order.po_number : 'N/A';
+                      
+                      // Remark from notes - extract if it contains "Fund Cluster" or use as-is
+                      let remark = order.notes || 'No remarks';
+                      if (remark.includes('Fund Cluster:')) {
+                        // Extract the part after "Fund Cluster:" or use the whole note
+                        remark = remark.split('Fund Cluster:')[1]?.split(',')[0]?.trim() || remark;
+                      }
+                      
+                      // Requested by - use supplier name if it's the entity name, otherwise use current user
+                      const requestedBy = order.supplier.name === employeeFormData.entity_name 
+                        ? employeeFormData.entity_name 
+                        : (user?.full_name || user?.username || 'N/A');
+                      
+                      return (
+                        <tr key={order.id}>
+                          <td>{statusBadge}</td>
+                          <td>{dateRequested}</td>
+                          <td>{requestedBy}</td>
+                          <td>{prNumber}</td>
+                          <td>
+                            <span className="text-danger">{remark}</span>
+                          </td>
+                          <td>
                             <Button
-                              variant="outline-success"
+                              variant="outline-primary"
                               size="sm"
-                              onClick={() => handleApprove(order.id)}
-                              aria-label={`Approve ${order.po_number}`}
+                              onClick={() => {
+                                setSelectedRequestItems(order.items || []);
+                                setShowItemsModal(true);
+                              }}
                             >
-                              <i className="bi bi-check"></i>
+                              <i className="bi bi-file-earmark-text me-1"></i>
+                              View
                             </Button>
-                          )}
-                          {user?.is_admin && order.status === 'Draft' && (
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => handleDelete(order.id)}
-                              aria-label={`Delete ${order.po_number}`}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </Button>
-                          )}
-                        </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {orders.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-4 text-muted">
+                        No purchase requests found
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </Table>
             </div>
-          ) : (
-            <div className="text-center py-4">
-              <i className="bi bi-cart text-muted" style={{ fontSize: '2rem' }}></i>
-              <p className="text-muted mt-2">
-                {searchTerm ? 'No orders found matching your search' : 'No purchase orders found'}
-              </p>
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+          </Card.Body>
+        </Card>
+      ) : (
+        <>
+          {/* Search */}
+          <Row className="mb-4">
+            <Col md={6}>
+              <InputGroup>
+                <InputGroup.Text>
+                  <i className="bi bi-search"></i>
+                </InputGroup.Text>
+                <Form.Control
+                  type="text"
+                  placeholder="Search orders..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  aria-label="Search orders"
+                />
+              </InputGroup>
+            </Col>
+          </Row>
+
+          {/* Orders Table */}
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">Purchase Orders</h5>
+            </Card.Header>
+            <Card.Body className="p-0">
+              {filteredOrders.length > 0 ? (
+                <div className="table-responsive">
+                  <Table striped bordered className="mb-0">
+                    <thead>
+                      <tr>
+                        <th>PO Number</th>
+                        <th>Supplier</th>
+                        <th>Date Created</th>
+                        <th>Status</th>
+                        <th>Total Amount</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOrders.map((order) => (
+                        <tr key={order.id}>
+                          <td>
+                            <strong>{order.po_number}</strong>
+                          </td>
+                          <td>{order.supplier.name}</td>
+                          <td>{formatDate(order.date_created)}</td>
+                          <td>{getStatusBadge(order.status)}</td>
+                          <td>
+                            <strong>{formatCurrency(order.total_amount)}</strong>
+                          </td>
+                          <td>
+                            <div className="d-flex gap-1">
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => navigate(`/orders/${order.id}`)}
+                                aria-label={`View ${order.po_number}`}
+                              >
+                                <i className="bi bi-eye"></i>
+                              </Button>
+                              {order.status === 'Draft' && (
+                                <Button
+                                  variant="outline-success"
+                                  size="sm"
+                                  onClick={() => handleApprove(order.id)}
+                                  aria-label={`Approve ${order.po_number}`}
+                                >
+                                  <i className="bi bi-check"></i>
+                                </Button>
+                              )}
+                              {user?.is_admin && order.status === 'Draft' && (
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => handleDelete(order.id)}
+                                  aria-label={`Delete ${order.po_number}`}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <i className="bi bi-cart text-muted" style={{ fontSize: '2rem' }}></i>
+                  <p className="text-muted mt-2">
+                    {searchTerm ? 'No orders found matching your search' : 'No purchase orders found'}
+                  </p>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </>
+      )}
 
       {/* Order Modal */}
       <Modal show={showModal} onHide={handleCloseModal} size="xl">
         <Modal.Header closeButton>
           <Modal.Title>
-            {editingOrder ? 'Edit Purchase Order' : 'Create New Purchase Order'}
+            {editingOrder 
+              ? `Edit ${user?.role === 'employee' ? 'Purchase Request' : 'Purchase Order'}`
+              : `Create New ${user?.role === 'employee' ? 'Purchase Request' : 'Purchase Order'}`
+            }
           </Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSubmit}>
           <Modal.Body>
-            <Row className="g-3">
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label htmlFor="supplier">Supplier *</Form.Label>
-                  <Form.Select
-                    id="supplier"
-                    value={formData.supplier_id}
-                    onChange={(e) => setFormData({ ...formData, supplier_id: Number(e.target.value) })}
-                    isInvalid={!!errors.supplier_id}
-                    aria-describedby="supplierError"
-                  >
-                    <option value={0}>Select Supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                    ))}
-                  </Form.Select>
-                  <Form.Control.Feedback type="invalid" id="supplierError">
-                    {errors.supplier_id}
-                  </Form.Control.Feedback>
-                </Form.Group>
-              </Col>
+            {user?.role === 'employee' ? (
+              <>
+                {/* PURCHASE REQUEST Section */}
+                <Card className="mb-4">
+                  <Card.Header className="bg-primary text-white">
+                    <h5 className="mb-0 fw-bold">PURCHASE REQUEST</h5>
+                  </Card.Header>
+                  <Card.Body>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold">ENTITY NAME</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={employeeFormData.entity_name}
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, entity_name: e.target.value })}
+                            readOnly
+                            className="bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold">FUND CLUSTER</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={employeeFormData.fund_cluster}
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, fund_cluster: e.target.value })}
+                            placeholder="Enter fund cluster"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold">OFFICE / SECTION</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={employeeFormData.office_section}
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, office_section: e.target.value })}
+                            readOnly
+                            className="bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold">RESPONSIBILITY CENTER CODE</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={employeeFormData.responsibility_center_code}
+                            onChange={(e) => setEmployeeFormData({ ...employeeFormData, responsibility_center_code: e.target.value })}
+                            placeholder="Enter responsibility center code"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-bold">DATE</Form.Label>
+                          <InputGroup>
+                            <Form.Control
+                              type="text"
+                              value={employeeFormData.date}
+                              onChange={(e) => setEmployeeFormData({ ...employeeFormData, date: e.target.value })}
+                              placeholder="MM/DD/YYYY"
+                            />
+                            <InputGroup.Text>
+                              <i className="bi bi-calendar"></i>
+                            </InputGroup.Text>
+                          </InputGroup>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
 
-              <Col md={12}>
-                <Form.Group>
-                  <Form.Label htmlFor="delivery_address">Delivery Address *</Form.Label>
-                  <Form.Control
-                    id="delivery_address"
-                    as="textarea"
-                    rows={2}
-                    value={formData.delivery_address}
-                    onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })}
-                    isInvalid={!!errors.delivery_address}
-                    aria-describedby="deliveryAddressError"
-                  />
-                  <Form.Control.Feedback type="invalid" id="deliveryAddressError">
-                    {errors.delivery_address}
-                  </Form.Control.Feedback>
-                </Form.Group>
-              </Col>
+                {/* LIST OF ITEMS Section */}
+                <Card>
+                  <Card.Header className="bg-primary text-white">
+                    <h5 className="mb-0 fw-bold">LIST OF ITEMS</h5>
+                  </Card.Header>
+                  <Card.Body className="p-0">
+                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                      <Table striped bordered className="mb-0">
+                        <thead className="bg-light sticky-top">
+                          <tr>
+                            <th className="fw-bold">UNIT</th>
+                            <th className="fw-bold">ITEM DESCRIPTION</th>
+                            <th className="fw-bold">QUANTITY</th>
+                            <th className="fw-bold">UNIT COST</th>
+                            <th className="fw-bold">TOTAL COST</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {employeeFormData.items.map((item, index) => (
+                            <tr key={index}>
+                              <td>
+                                <Form.Control
+                                  type="text"
+                                  value={item.unit}
+                                  onChange={(e) => {
+                                    const newItems = [...employeeFormData.items];
+                                    newItems[index].unit = e.target.value;
+                                    setEmployeeFormData({ ...employeeFormData, items: newItems });
+                                  }}
+                                  placeholder="Unit"
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="text"
+                                  value={item.item_description}
+                                  onChange={(e) => {
+                                    const newItems = [...employeeFormData.items];
+                                    newItems[index].item_description = e.target.value;
+                                    setEmployeeFormData({ ...employeeFormData, items: newItems });
+                                  }}
+                                  placeholder="Item description"
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  min="0"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const newItems = [...employeeFormData.items];
+                                    const qty = Number(e.target.value) || 0;
+                                    newItems[index].quantity = qty;
+                                    newItems[index].total_cost = qty * newItems[index].unit_cost;
+                                    setEmployeeFormData({ ...employeeFormData, items: newItems });
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.unit_cost}
+                                  onChange={(e) => {
+                                    const newItems = [...employeeFormData.items];
+                                    const cost = Number(e.target.value) || 0;
+                                    newItems[index].unit_cost = cost;
+                                    newItems[index].total_cost = newItems[index].quantity * cost;
+                                    setEmployeeFormData({ ...employeeFormData, items: newItems });
+                                  }}
+                                />
+                              </td>
+                              <td>
+                                <Form.Control
+                                  type="text"
+                                  value={item.total_cost.toFixed(2)}
+                                  readOnly
+                                  className="bg-light"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </>
+            ) : (
+              <Row className="g-3">
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label htmlFor="supplier">Supplier *</Form.Label>
+                    <Form.Select
+                      id="supplier"
+                      value={formData.supplier_id}
+                      onChange={(e) => setFormData({ ...formData, supplier_id: Number(e.target.value) })}
+                      isInvalid={!!errors.supplier_id}
+                      aria-describedby="supplierError"
+                    >
+                      <option value={0}>Select Supplier</option>
+                      {suppliers.map(supplier => (
+                        <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                      ))}
+                    </Form.Select>
+                    <Form.Control.Feedback type="invalid" id="supplierError">
+                      {errors.supplier_id}
+                    </Form.Control.Feedback>
+                  </Form.Group>
+                </Col>
 
-              <Col md={12}>
-                <Form.Group>
-                  <Form.Label htmlFor="notes">Notes</Form.Label>
-                  <Form.Control
-                    id="notes"
-                    as="textarea"
-                    rows={2}
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  />
-                </Form.Group>
-              </Col>
+                <Col md={12}>
+                  <Form.Group>
+                    <Form.Label htmlFor="delivery_address">Delivery Address *</Form.Label>
+                    <Form.Control
+                      id="delivery_address"
+                      as="textarea"
+                      rows={2}
+                      value={formData.delivery_address}
+                      onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })}
+                      isInvalid={!!errors.delivery_address}
+                      aria-describedby="deliveryAddressError"
+                    />
+                    <Form.Control.Feedback type="invalid" id="deliveryAddressError">
+                      {errors.delivery_address}
+                    </Form.Control.Feedback>
+                  </Form.Group>
+                </Col>
+
+                <Col md={12}>
+                  <Form.Group>
+                    <Form.Label htmlFor="notes">Notes</Form.Label>
+                    <Form.Control
+                      id="notes"
+                      as="textarea"
+                      rows={2}
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
 
               <Col md={12}>
                 <div className="d-flex justify-content-between align-items-center mb-3">
@@ -777,16 +1235,76 @@ const Orders: React.FC = () => {
                 )}
               </Col>
             </Row>
+            )}
           </Modal.Body>
           <Modal.Footer>
-            <Button variant="secondary" onClick={handleCloseModal}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              {editingOrder ? 'Update Order' : 'Create Order'}
-            </Button>
+            {user?.role === 'employee' ? (
+              <>
+                <Button variant="danger" onClick={handleCloseModal}>
+                  CANCEL
+                </Button>
+                <Button variant="success" type="submit">
+                  SUBMIT
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={handleCloseModal}>
+                  Cancel
+                </Button>
+                <Button variant="primary" type="submit">
+                  {editingOrder ? 'Update Order' : 'Create Order'}
+                </Button>
+              </>
+            )}
           </Modal.Footer>
         </Form>
+      </Modal>
+
+      {/* Items View Modal for Employees */}
+      <Modal show={showItemsModal} onHide={() => setShowItemsModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>LIST OF ITEMS</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="table-responsive">
+            <Table striped bordered className="mb-0">
+              <thead className="bg-light">
+                <tr>
+                  <th className="fw-bold">UNIT</th>
+                  <th className="fw-bold">ITEM DESCRIPTION</th>
+                  <th className="fw-bold">QUANTITY</th>
+                  <th className="fw-bold">UNIT COST</th>
+                  <th className="fw-bold">TOTAL COST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedRequestItems.length > 0 ? (
+                  selectedRequestItems.map((item: any, index: number) => (
+                    <tr key={index}>
+                      <td>{item.product?.unit || item.unit || 'N/A'}</td>
+                      <td>{item.product?.name || item.item_description || 'N/A'}</td>
+                      <td>{item.quantity || 0}</td>
+                      <td>{item.unit_price?.toFixed(2) || item.unit_cost?.toFixed(2) || '0.00'}</td>
+                      <td>{item.total_price?.toFixed(2) || item.total_cost?.toFixed(2) || '0.00'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="text-center py-4 text-muted">
+                      No items found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowItemsModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
       </Modal>
 
       {/* Toast Notification */}

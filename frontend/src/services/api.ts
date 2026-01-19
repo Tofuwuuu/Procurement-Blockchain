@@ -295,6 +295,43 @@ export interface CreateTransactionData {
   data?: any;
 }
 
+// Purchase Request Types
+export interface PurchaseRequestItem {
+  unit: string;
+  item_description: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+export interface CreatePurchaseRequestData {
+  entity_name: string;
+  fund_cluster?: string;
+  office_section: string;
+  responsibility_center_code?: string;
+  date: string;
+  remark?: string;
+  items: PurchaseRequestItem[];
+}
+
+export interface PurchaseRequest {
+  id: string;
+  pr_number: string;
+  entity_name: string;
+  fund_cluster?: string;
+  office_section: string;
+  responsibility_center_code?: string;
+  date: string;
+  remark?: string;
+  status: string;
+  requested_by: string;
+  requested_by_id?: string;
+  items: PurchaseRequestItem[];
+  total_amount: number;
+  date_created: string;
+  date_updated?: string;
+}
+
 // ===== SETTINGS TYPES =====
 export interface SystemSettings {
   company_name: string;
@@ -461,6 +498,31 @@ export const apiService = {
 
   deleteSupplier: async (id: number): Promise<void> => {
     const response = await api.delete(`/api/suppliers/${id}`);
+    return response.data;
+  },
+
+  // ===== PURCHASE REQUESTS =====
+  getPurchaseRequests: async (userOnly: boolean = false): Promise<PurchaseRequest[]> => {
+    try {
+      const url = `/api/purchase-requests${userOnly ? '?user_only=true' : ''}`;
+      console.log('📡 Fetching purchase requests from:', url);
+      const response = await api.get(url);
+      console.log('✅ Purchase requests response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error fetching purchase requests:', error);
+      console.error('Response:', error.response?.data);
+      throw error;
+    }
+  },
+
+  getPurchaseRequest: async (id: string): Promise<PurchaseRequest> => {
+    const response = await api.get(`/api/purchase-requests/${id}`);
+    return response.data;
+  },
+
+  createPurchaseRequest: async (data: CreatePurchaseRequestData): Promise<PurchaseRequest> => {
+    const response = await api.post('/api/purchase-requests', data);
     return response.data;
   },
 

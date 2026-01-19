@@ -68,16 +68,43 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   Dashboard
                 </Nav.Link>
                 
-                {/* Purchase Request - Available to all authenticated users */}
-                <Nav.Link 
-                  as={Link} 
-                  to="/purchase-request" 
-                  active={isActive('/purchase-request')}
-                  className="d-flex align-items-center nav-item-custom"
-                >
-                  <i className="bi bi-file-earmark-plus me-2"></i>
-                  Purchase Request
-                </Nav.Link>
+                {/* Purchase Request - Available to all authenticated users except custodian and inspector */}
+                {user?.role !== 'custodian' && user?.role !== 'inspector' && (
+                  <Nav.Link 
+                    as={Link} 
+                    to="/purchase-request" 
+                    active={isActive('/purchase-request')}
+                    className="d-flex align-items-center nav-item-custom"
+                  >
+                    <i className="bi bi-file-earmark-plus me-2"></i>
+                    Purchase Request
+                  </Nav.Link>
+                )}
+                
+                {/* Custodian-specific navigation - Only for custodian users */}
+                {user?.role === 'custodian' && !user?.is_admin && (
+                  <>
+                    <Nav.Link 
+                      as={Link} 
+                      to="/inventory-custodian-slip" 
+                      active={isActive('/inventory-custodian-slip')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-file-earmark-text me-2"></i>
+                      Inventory Custodian Slip
+                    </Nav.Link>
+                    
+                    <Nav.Link 
+                      as={Link} 
+                      to="/property-acknowledgement-receipt" 
+                      active={isActive('/property-acknowledgement-receipt')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-receipt me-2"></i>
+                      Property Acknowledgement Receipt
+                    </Nav.Link>
+                  </>
+                )}
                 
                 {/* Procurement-specific navigation - Only for procurement users */}
                 {(user?.role === 'procurement' || user?.role === 'procurement0') && !user?.is_admin && (
@@ -269,6 +296,44 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   </>
                 )}
                 
+                {/* Canvasser role - abstract of canvass and purchase order */}
+                {user?.role === 'canvasser' && !user?.is_admin && (
+                  <>
+                    <Nav.Link 
+                      as={Link} 
+                      to="/abstract-of-canvass" 
+                      active={isActive('/abstract-of-canvass')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-file-earmark-spreadsheet me-2"></i>
+                      Abstract of Canvass
+                    </Nav.Link>
+                    
+                    <Nav.Link 
+                      as={Link} 
+                      to="/purchase-order" 
+                      active={isActive('/purchase-order')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-cart me-2"></i>
+                      Purchase Order
+                    </Nav.Link>
+                  </>
+                )}
+                
+                {/* Inspector role - inspection and acceptance report */}
+                {user?.role === 'inspector' && !user?.is_admin && (
+                  <Nav.Link 
+                    as={Link} 
+                    to="/inspection-acceptance-report" 
+                    active={isActive('/inspection-acceptance-report')}
+                    className="d-flex align-items-center nav-item-custom"
+                  >
+                    <i className="bi bi-clipboard-check me-2"></i>
+                    Inspection and Acceptance Report
+                  </Nav.Link>
+                )}
+                
                 {/* Reports dropdown - Admin gets full access, others get role-based access */}
                 <Dropdown as={Nav.Item} className="d-flex align-items-center">
                   <Dropdown.Toggle 
@@ -410,6 +475,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     )}
                     {user?.role === 'finance' && !user?.is_admin && (
                       <Badge bg="success" className="me-2">Finance</Badge>
+                    )}
+                    {user?.role === 'custodian' && !user?.is_admin && (
+                      <Badge bg="info" className="me-2">Custodian</Badge>
+                    )}
+                    {user?.role === 'canvasser' && !user?.is_admin && (
+                      <Badge bg="warning" className="me-2">Canvasser</Badge>
+                    )}
+                    {user?.role === 'employee' && !user?.is_admin && (
+                      <Badge bg="warning" className="me-2">Employee</Badge>
+                    )}
+                    {user?.role === 'inspector' && !user?.is_admin && (
+                      <Badge bg="success" className="me-2">Inspector</Badge>
                     )}
                     {user?.role === 'supplier' && !user?.is_admin && (
                       <Badge bg="info" className="me-2">Supplier</Badge>

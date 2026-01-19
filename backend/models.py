@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # Login request model
@@ -36,3 +36,39 @@ class User(BaseModel):
     role: Optional[str] = "user"
     created_at: Optional[datetime] = None
     is_active: bool = True
+
+# Purchase Request Item model
+class PurchaseRequestItem(BaseModel):
+    unit: str
+    item_description: str
+    quantity: int
+    unit_cost: float
+    total_cost: float
+
+# Purchase Request model (for creating)
+class CreatePurchaseRequest(BaseModel):
+    entity_name: str
+    fund_cluster: Optional[str] = ""
+    office_section: str
+    responsibility_center_code: Optional[str] = ""
+    date: str
+    remark: Optional[str] = ""
+    items: List[PurchaseRequestItem]
+
+# Purchase Request model (for response)
+class PurchaseRequestResponse(BaseModel):
+    id: str
+    pr_number: str
+    entity_name: str
+    fund_cluster: Optional[str] = ""
+    office_section: str
+    responsibility_center_code: Optional[str] = ""
+    date: str
+    remark: Optional[str] = ""
+    status: str
+    requested_by: str
+    requested_by_id: Optional[str] = None
+    items: List[PurchaseRequestItem]
+    total_amount: float
+    date_created: str
+    date_updated: Optional[str] = None
