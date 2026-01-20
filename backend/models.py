@@ -55,6 +55,17 @@ class CreatePurchaseRequest(BaseModel):
     remark: Optional[str] = ""
     items: List[PurchaseRequestItem]
 
+# Purchase Request model (for updating)
+class UpdatePurchaseRequest(BaseModel):
+    entity_name: Optional[str] = None
+    fund_cluster: Optional[str] = None
+    office_section: Optional[str] = None
+    responsibility_center_code: Optional[str] = None
+    date: Optional[str] = None
+    remark: Optional[str] = None
+    status: Optional[str] = None
+    items: Optional[List[PurchaseRequestItem]] = None
+
 # Purchase Request model (for response)
 class PurchaseRequestResponse(BaseModel):
     id: str

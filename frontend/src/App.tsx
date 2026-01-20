@@ -13,6 +13,7 @@ import Users from './pages/Users';
 import Settings from './pages/Settings';
 import AbstractOfCanvass from './pages/AbstractOfCanvass';
 import PurchaseRequestCanvasser from './pages/PurchaseRequestCanvasser';
+import SupplierSearch from './pages/SupplierSearch';
 import Login from './pages/Login';
 import ItemManagement from './pages/ItemManagement';
 import AuditLogs from './pages/AuditLogs';
@@ -172,6 +173,18 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <AbstractOfCanvass />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Canvasser - Supplier Search */}
+        <Route
+          path="/supplier-search"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SupplierSearch />
               </Layout>
             </ProtectedRoute>
           }

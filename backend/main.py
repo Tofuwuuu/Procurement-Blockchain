@@ -8,7 +8,7 @@ import os
 
 # Import local modules
 from database import connect_to_mongo, close_mongo_connection, get_database
-from models import LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse
+from models import LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse, UpdatePurchaseRequest
 from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
 from typing import List
@@ -496,6 +496,104 @@ async def get_purchase_request(
         import traceback
         error_trace = traceback.format_exc()
         print(f"❌ Get purchase request error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Update Purchase Request endpoint
+@app.put("/api/purchase-requests/{pr_id}", response_model=PurchaseRequestResponse)
+async def update_purchase_request(
+    pr_id: str,
+    update_data: UpdatePurchaseRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update a purchase request (e.g., change status to Approved)"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        
+        from bson import ObjectId
+        # Try to find by ObjectId first
+        try:
+            pr = await purchase_requests_collection.find_one({"_id": ObjectId(pr_id)})
+            pr_filter = {"_id": ObjectId(pr_id)}
+        except:
+            # Try by PR number if ObjectId fails
+            pr = await purchase_requests_collection.find_one({"pr_number": pr_id})
+            pr_filter = {"pr_number": pr_id}
+        
+        if not pr:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Purchase request not found"
+            )
+        
+        # Build update document with only provided fields
+        update_doc = {}
+        if update_data.entity_name is not None:
+            update_doc["entity_name"] = update_data.entity_name
+        if update_data.fund_cluster is not None:
+            update_doc["fund_cluster"] = update_data.fund_cluster
+        if update_data.office_section is not None:
+            update_doc["office_section"] = update_data.office_section
+        if update_data.responsibility_center_code is not None:
+            update_doc["responsibility_center_code"] = update_data.responsibility_center_code
+        if update_data.date is not None:
+            update_doc["date"] = update_data.date
+        if update_data.remark is not None:
+            update_doc["remark"] = update_data.remark
+        if update_data.status is not None:
+            update_doc["status"] = update_data.status
+        if update_data.items is not None:
+            update_doc["items"] = [item.dict() for item in update_data.items]
+            # Recalculate total amount if items changed
+            update_doc["total_amount"] = sum(item.total_cost for item in update_data.items)
+        
+        # Always update date_updated timestamp
+        update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
+        
+        # Perform the update
+        print(f"💾 Updating purchase request {pr_id} with: {update_doc}")
+        result = await purchase_requests_collection.update_one(
+            pr_filter,
+            {"$set": update_doc}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Purchase request not found"
+            )
+        
+        # Fetch the updated document
+        updated_pr = await purchase_requests_collection.find_one(pr_filter)
+        if not updated_pr:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve updated purchase request"
+            )
+        
+        updated_pr["id"] = str(updated_pr["_id"])
+        print(f"✅ Purchase request updated successfully: {updated_pr.get('pr_number')} - Status: {updated_pr.get('status')}")
+        return PurchaseRequestResponse(**updated_pr)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Update purchase request error: {str(e)}")
         print(f"Traceback: {error_trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
