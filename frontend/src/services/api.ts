@@ -317,6 +317,7 @@ export interface CreatePurchaseRequestData {
 export interface PurchaseRequest {
   id: string;
   pr_number: string;
+  ref_number?: string;
   entity_name: string;
   fund_cluster?: string;
   office_section: string;
@@ -683,6 +684,34 @@ export const apiService = {
     const response = await api.post('/api/settings/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
+    return response.data;
+  },
+
+  // ===== SUPPLIER SEARCH =====
+  searchSuppliers: async (data: {
+    urls?: string[];
+    stock_property_no?: string;
+    unit?: string;
+    item_description?: string;
+    quantity?: number;
+    unit_cost?: number;
+  }): Promise<any[]> => {
+    const response = await api.post('/api/supplier-search/search', data);
+    return response.data;
+  },
+
+  getSupplierSearchResults: async (params?: {
+    item_description?: string;
+    category?: string;
+    limit?: number;
+  }): Promise<any[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.item_description) queryParams.append('item_description', params.item_description);
+    if (params?.category) queryParams.append('category', params.category);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const url = `/api/supplier-search/results${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await api.get(url);
     return response.data;
   },
 

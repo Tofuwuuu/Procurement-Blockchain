@@ -13,6 +13,14 @@ from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
 from typing import List
 
+# Import supplier search router
+import sys
+import os
+scraping_path = os.path.join(os.path.dirname(__file__), 'Scraping')
+if scraping_path not in sys.path:
+    sys.path.append(scraping_path)
+from supplier_api import router as supplier_search_router
+
 # Create FastAPI instance
 app = FastAPI(
     title="Blockchain Backend API",
@@ -28,6 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include supplier search router
+app.include_router(supplier_search_router)
 
 # HTTP Bearer for token authentication
 security = HTTPBearer()
@@ -310,6 +321,34 @@ async def generate_pr_number() -> str:
         timestamp = int(datetime.now().timestamp())
         return f"PR-{year}-{str(timestamp % 1000).zfill(3)}"
 
+# Helper function to generate CC reference number
+async def generate_cc_reference_number() -> str:
+    """Generate a unique reference number in format CCYYYY-MMDD (and -XXX if needed)."""
+    db = await get_database()
+    counters_collection = db.counters
+    now = datetime.now()
+    year = now.year
+    mmdd = now.strftime("%m%d")
+    base = f"CC{year}-{mmdd}"
+    key = f"cc_{year}_{mmdd}"
+
+    try:
+        counter = await counters_collection.find_one_and_update(
+            {"_id": key},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        seq = int(counter.get("seq", 1))
+        # First one of the day matches exactly what you asked: CC2025-0120
+        if seq <= 1:
+            return base
+        # Subsequent ones get a suffix to avoid duplicates
+        return f"{base}-{str(seq).zfill(3)}"
+    except Exception as e:
+        print(f"Error generating CC reference number: {e}")
+        return base
+
 # Create Purchase Request endpoint
 @app.post("/api/purchase-requests", response_model=PurchaseRequestResponse)
 async def create_purchase_request(
@@ -351,6 +390,7 @@ async def create_purchase_request(
         # Create purchase request document
         pr_doc = {
             "pr_number": pr_number,
+            "ref_number": None,
             "entity_name": request.entity_name,
             "fund_cluster": request.fund_cluster or "",
             "office_section": request.office_section,
@@ -553,12 +593,21 @@ async def update_purchase_request(
             update_doc["date"] = update_data.date
         if update_data.remark is not None:
             update_doc["remark"] = update_data.remark
+        if update_data.ref_number is not None:
+            update_doc["ref_number"] = update_data.ref_number
         if update_data.status is not None:
             update_doc["status"] = update_data.status
         if update_data.items is not None:
             update_doc["items"] = [item.dict() for item in update_data.items]
             # Recalculate total amount if items changed
             update_doc["total_amount"] = sum(item.total_cost for item in update_data.items)
+
+        # If canvasser approves, generate CC ref number if missing
+        new_status = update_doc.get("status")
+        if new_status and str(new_status).lower() == "approved":
+            existing_ref = pr.get("ref_number")
+            if not existing_ref and "ref_number" not in update_doc:
+                update_doc["ref_number"] = await generate_cc_reference_number()
         
         # Always update date_updated timestamp
         update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()

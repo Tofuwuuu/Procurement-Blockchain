@@ -20,6 +20,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
+  const [updateRemark, setUpdateRemark] = useState('');
   const [formData, setFormData] = useState({
     entity_name: user?.full_name || user?.username || '',
     fund_cluster: '',
@@ -94,6 +95,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
 
   const openUpdateModal = (req: PurchaseRequest) => {
     setSelectedRequest(req);
+    setUpdateRemark(req.remark || '');
     setShowUpdateModal(true);
   };
 
@@ -222,12 +224,13 @@ const PurchaseRequestCanvasser: React.FC = () => {
                   <th>Date Requested</th>
                   <th>Total Amount</th>
                   <th>Remark</th>
+                  <th>Details</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={8} className="text-center text-muted py-4">
                       No purchase requests found
                     </td>
                   </tr>
@@ -244,13 +247,13 @@ const PurchaseRequestCanvasser: React.FC = () => {
                           req.total_amount || 0
                         )}
                       </td>
-                      <td className="d-flex justify-content-between align-items-center">
-                        <span>{req.remark || 'No remarks'}</span>
+                      <td>{req.remark || 'No remarks'}</td>
+                      <td className="text-center">
                         <Button
                           variant="outline-primary"
                           size="sm"
-                          className="ms-2"
                           onClick={() => openUpdateModal(req)}
+                          disabled={req.status?.toLowerCase() === 'approved'}
                         >
                           <i className="bi bi-journal-text me-1"></i>
                           Update
@@ -438,9 +441,10 @@ const PurchaseRequestCanvasser: React.FC = () => {
             try {
               setSubmitting(true);
               // Update status to Approved per request
-              const payload = { status: 'Approved' as const };
-              await apiService.updatePurchaseRequest(selectedRequest.id, payload);
-              setToastMessage('Purchase request updated to Approved');
+              const payload = { status: 'Approved' as const, remark: updateRemark };
+              const updated = await apiService.updatePurchaseRequest(selectedRequest.id, payload);
+              const ref = (updated as any)?.ref_number ? ` (Ref: ${(updated as any).ref_number})` : '';
+              setToastMessage(`Purchase request updated to Approved${ref}`);
               setToastType('success');
               setShowToast(true);
               await loadRequests();
@@ -501,11 +505,18 @@ const PurchaseRequestCanvasser: React.FC = () => {
                 <Row className="mb-3">
                   <Col md={6}>
                     <Form.Label>Ref. Number</Form.Label>
-                    <Form.Control placeholder="N/A" disabled />
+                    <Form.Control
+                      value={selectedRequest.ref_number || 'Auto-generated on submit'}
+                      disabled
+                    />
                   </Col>
                   <Col md={6}>
                     <Form.Label>Remark</Form.Label>
-                    <Form.Control value={selectedRequest.remark || 'No remarks'} disabled />
+                    <Form.Control
+                      value={updateRemark}
+                      onChange={(e) => setUpdateRemark(e.target.value)}
+                      placeholder="Add a comment..."
+                    />
                   </Col>
                 </Row>
               </>

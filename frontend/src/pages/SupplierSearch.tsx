@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Form, Button, Table, InputGroup } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services/api';
 import Toast from '../components/Toast';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface SearchResult {
   no: number;
@@ -30,10 +32,38 @@ const SupplierSearch: React.FC = () => {
     { no: 4, category: 'Computer', itemDescription: 'Brand Z Printer', unitPrice: 14299.00, supplierName: 'Company Name 4', selected: true },
   ]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(4);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  const [loading, setLoading] = useState(false);
+  const [loadingResults, setLoadingResults] = useState(false);
+
+  // Load saved results on mount
+  useEffect(() => {
+    loadSavedResults();
+  }, []);
+
+  const loadSavedResults = async () => {
+    try {
+      setLoadingResults(true);
+      const results = await apiService.getSupplierSearchResults({ limit: 100 });
+      const formattedResults = results.map((r: any, index: number) => ({
+        no: index + 1,
+        category: r.category || 'General',
+        itemDescription: r.item_description || '',
+        unitPrice: r.unit_price || 0,
+        supplierName: r.supplier_name || 'Unknown',
+        selected: false
+      }));
+      setSearchResults(formattedResults);
+    } catch (error: any) {
+      console.error('Failed to load saved results:', error);
+      // Keep mock data if API fails
+    } finally {
+      setLoadingResults(false);
+    }
+  };
 
   const handleAddUrl = () => {
     if (newUrl.trim()) {
@@ -56,11 +86,45 @@ const SupplierSearch: React.FC = () => {
     setFormData({ ...formData, [field]: value });
   };
 
-  const handleSearch = () => {
-    // TODO: Implement actual search functionality with backend
-    setToastMessage('Search functionality will be implemented with backend integration');
-    setToastType('info');
-    setShowToast(true);
+  const handleSearch = async () => {
+    try {
+      setLoading(true);
+      
+      // Prepare search data
+      const searchData = {
+        urls: urls.filter(url => url.trim()),
+        stock_property_no: formData.stockPropertyNo || undefined,
+        unit: formData.unit || undefined,
+        item_description: formData.itemDescription || undefined,
+        quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
+        unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
+      };
+
+      // Call API to search and scrape
+      const results = await apiService.searchSuppliers(searchData);
+      
+      // Format results for display
+      const formattedResults = results.map((r: any, index: number) => ({
+        no: index + 1,
+        category: r.category || 'General',
+        itemDescription: r.item_description || '',
+        unitPrice: r.unit_price || 0,
+        supplierName: r.supplier_name || 'Unknown',
+        selected: false
+      }));
+
+      setSearchResults(formattedResults);
+      setToastMessage(`Found ${formattedResults.length} supplier result(s)`);
+      setToastType('success');
+      setShowToast(true);
+    } catch (error: any) {
+      console.error('Search error:', error);
+      setToastMessage(error.response?.data?.detail || 'Failed to search suppliers');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -208,9 +272,24 @@ const SupplierSearch: React.FC = () => {
                 </Row>
 
                 {/* Search Button */}
-                <Button variant="success" size="lg" onClick={handleSearch} className="w-100">
-                  <i className="bi bi-search me-2"></i>
-                  Search
+                <Button 
+                  variant="success" 
+                  size="lg" 
+                  onClick={handleSearch} 
+                  className="w-100"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-search me-2"></i>
+                      Search
+                    </>
+                  )}
                 </Button>
               </Form>
             </Card.Body>
@@ -238,7 +317,14 @@ const SupplierSearch: React.FC = () => {
                 />
               </InputGroup>
 
+              {loadingResults && (
+                <div className="text-center py-4">
+                  <LoadingSpinner size="sm" text="Loading results..." />
+                </div>
+              )}
+
               {/* Results Table */}
+              {!loadingResults && (
               <div className="table-responsive">
                 <Table striped bordered hover>
                   <thead>
@@ -299,6 +385,7 @@ const SupplierSearch: React.FC = () => {
                   </tbody>
                 </Table>
               </div>
+              )}
 
               {/* Pagination */}
               <div className="d-flex justify-content-between align-items-center mt-3">

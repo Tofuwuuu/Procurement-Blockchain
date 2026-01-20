@@ -63,6 +63,7 @@ class UpdatePurchaseRequest(BaseModel):
     responsibility_center_code: Optional[str] = None
     date: Optional[str] = None
     remark: Optional[str] = None
+    ref_number: Optional[str] = None
     status: Optional[str] = None
     items: Optional[List[PurchaseRequestItem]] = None
 
@@ -70,6 +71,7 @@ class UpdatePurchaseRequest(BaseModel):
 class PurchaseRequestResponse(BaseModel):
     id: str
     pr_number: str
+    ref_number: Optional[str] = None
     entity_name: str
     fund_cluster: Optional[str] = ""
     office_section: str
