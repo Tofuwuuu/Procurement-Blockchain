@@ -206,15 +206,18 @@ async def add_suppliers_to_canvass(
                 print(f"🔍 Looking for supplier: {supplier_id}")
                 supplier = await supplier_collection.find_one({"_id": ObjectId(supplier_id)})
                 if supplier:
-                    # Store the FULL supplier info so canvassing can use all fields later.
-                    # Keep Mongo _id as supplier_id string and strip ObjectId fields.
-                    supplier_data = dict(supplier)
-                    supplier_data.pop("_id", None)
-                    supplier_data.pop("id", None)
-                    supplier_data["supplier_id"] = str(supplier.get("_id"))
-                    # Normalize a few fields used by the UI
-                    supplier_data["name"] = supplier.get("supplier_name") or supplier.get("name")
-                    supplier_data["date_added"] = datetime.now().isoformat()
+                    supplier_data = {
+                        "supplier_id": str(supplier.get("_id")),
+                        "name": supplier.get("supplier_name"),
+                        "address": supplier.get("address"),
+                        "unit_price": supplier.get("unit_price", 0),
+                        "item_description": supplier.get("item_description"),
+                        "contact_person": supplier.get("contact_person"),
+                        "phone": supplier.get("phone"),
+                        "email": supplier.get("email"),
+                        "source": supplier.get("source", "Web Scraping"),
+                        "date_added": datetime.now().isoformat()
+                    }
                     suppliers.append(supplier_data)
                     print(f"✅ Supplier added: {supplier_data.get('name')}")
                 else:
@@ -250,6 +253,14 @@ async def add_suppliers_to_canvass(
             "purchase_request_id": request.purchase_request_id,
             "suppliers_added": len(suppliers)
         }
+        
+        return {
+            "success": True,
+            "message": f"Added {len(suppliers)} supplier(s) to purchase request",
+            "purchase_request_id": request.purchase_request_id,
+            "suppliers_added": len(suppliers)
+        }
+        
     except HTTPException:
         raise
     except Exception as e:

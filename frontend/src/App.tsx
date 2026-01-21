@@ -17,6 +17,9 @@ import SupplierSearch from './pages/SupplierSearch';
 import Login from './pages/Login';
 import ItemManagement from './pages/ItemManagement';
 import AuditLogs from './pages/AuditLogs';
+import Inspection from './pages/Inspection';
+import InventoryCustodianSlip from './pages/InventoryCustodianSlip';
+import PropertyAcknowledgementReceipt from './pages/PropertyAcknowledgementReceipt';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
@@ -308,6 +311,41 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ItemManagement />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Inspector route - Inspection and Acceptance Report */}
+        <Route
+          path="/inspection"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Inspection />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Custodian routes */}
+        <Route
+          path="/inventory-custodian-slip"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <InventoryCustodianSlip />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/property-acknowledgement-receipt"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PropertyAcknowledgementReceipt />
               </Layout>
             </ProtectedRoute>
           }

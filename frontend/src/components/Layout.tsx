@@ -271,6 +271,19 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   </>
                 )}
                 
+                {/* Inspector role - inspection and acceptance reports */}
+                {user?.role === 'inspector' && !user?.is_admin && (
+                  <Nav.Link 
+                    as={Link} 
+                    to="/inspection" 
+                    active={isActive('/inspection')}
+                    className="d-flex align-items-center nav-item-custom"
+                  >
+                    <i className="bi bi-clipboard-check me-2"></i>
+                    Inspection and Acceptance Report
+                  </Nav.Link>
+                )}
+                
                 {/* Finance role - financial operations and reports */}
                 {user?.role === 'finance' && !user?.is_admin && (
                   <>
@@ -339,19 +352,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                       Supplier Search
                     </Nav.Link>
                   </>
-                )}
-                
-                {/* Inspector role - inspection and acceptance report */}
-                {user?.role === 'inspector' && !user?.is_admin && (
-                  <Nav.Link 
-                    as={Link} 
-                    to="/inspection-acceptance-report" 
-                    active={isActive('/inspection-acceptance-report')}
-                    className="d-flex align-items-center nav-item-custom"
-                  >
-                    <i className="bi bi-clipboard-check me-2"></i>
-                    Inspection and Acceptance Report
-                  </Nav.Link>
                 )}
                 
                 {/* Reports dropdown - Admin gets full access, others get role-based access */}

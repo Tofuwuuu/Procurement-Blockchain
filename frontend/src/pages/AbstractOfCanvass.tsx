@@ -19,7 +19,6 @@ const AbstractOfCanvass: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadRequests();
@@ -49,32 +48,14 @@ const AbstractOfCanvass: React.FC = () => {
   };
 
   const openDetailModal = (request: PurchaseRequest) => {
-    // Always fetch the latest PR doc (suppliers can be added from Supplier Search)
-    setSelectedRequest(null);
-    setSelectedSupplierIds([]);
+    // Fetch the latest PR data to ensure we have any recently added suppliers
+    const latestRequest = requests.find(r => r.id === request.id);
+    if (latestRequest) {
+      setSelectedRequest(latestRequest);
+    } else {
+      setSelectedRequest(request);
+    }
     setShowDetailModal(true);
-    apiService
-      .getPurchaseRequest(request.id)
-      .then((fresh) => {
-        setSelectedRequest(fresh);
-        setSelectedSupplierIds(fresh.selected_supplier_ids || []);
-      })
-      .catch(() => {
-        // Fallback to whatever we already have in memory
-        const latestRequest = requests.find((r) => r.id === request.id);
-        const fallback = latestRequest || request;
-        setSelectedRequest(fallback);
-        setSelectedSupplierIds(fallback.selected_supplier_ids || []);
-      });
-  };
-
-  const toggleSupplierSelected = (supplier: any) => {
-    const supplierId = supplier?.supplier_id || supplier?.id || supplier?._id;
-    if (!supplierId) return;
-
-    setSelectedSupplierIds((prev) =>
-      prev.includes(supplierId) ? prev.filter((id) => id !== supplierId) : [...prev, supplierId]
-    );
   };
 
   const handleSubmitCanvass = async () => {
@@ -83,11 +64,7 @@ const AbstractOfCanvass: React.FC = () => {
       setSubmitting(true);
       // Update status to indicate canvassing is complete
       // This might need to be a different status or create a canvass record
-      await apiService.updatePurchaseRequest(selectedRequest.id, {
-        status: 'Completed',
-        selected_supplier_ids: selectedSupplierIds,
-        canvass_submitted_at: new Date().toISOString(),
-      } as any);
+      await apiService.updatePurchaseRequest(selectedRequest.id, { status: 'Completed' });
       setToastMessage('Abstract of Canvass submitted successfully');
       setToastType('success');
       setShowToast(true);
@@ -296,26 +273,9 @@ const AbstractOfCanvass: React.FC = () => {
                 {(selectedRequest as any).suppliers && (selectedRequest as any).suppliers.length > 0 ? (
                   (selectedRequest as any).suppliers.slice(0, 3).map((supplier: any, idx: number) => (
                     <Col md={4} key={idx} className="mb-3">
-                      <Card
-                        className={`h-100 ${selectedSupplierIds.includes(supplier?.supplier_id) ? 'border border-2 border-primary' : ''}`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => toggleSupplierSelected(supplier)}
-                        onKeyDown={(e: React.KeyboardEvent) => {
-                          if (e.key === 'Enter' || e.key === ' ') toggleSupplierSelected(supplier);
-                        }}
-                        aria-pressed={selectedSupplierIds.includes(supplier?.supplier_id)}
-                      >
+                      <Card className="h-100">
                         <Card.Body>
-                          <div className="d-flex justify-content-between align-items-center mb-3">
-                            <h6 className="fw-bold mb-0">Supplier {idx + 1}</h6>
-                            {selectedSupplierIds.includes(supplier?.supplier_id) && (
-                              <span className="text-primary fw-semibold">
-                                <i className="bi bi-check-circle-fill me-1"></i>
-                                Selected
-                              </span>
-                            )}
-                          </div>
+                          <h6 className="fw-bold mb-3">Supplier {idx + 1}</h6>
                           <div className="mb-3">
                             <label className="text-muted small">Name</label>
                             <div className="form-control-plaintext fw-semibold">{supplier.name || 'Unknown'}</div>
