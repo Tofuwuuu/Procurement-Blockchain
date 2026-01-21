@@ -700,6 +700,17 @@ export const apiService = {
     return response.data;
   },
 
+  searchSuppliersFromPurchaseRequests: async (data: {
+    purchase_request_ids: string[];
+    stock_property_no?: string;
+    unit?: string;
+    quantity?: number;
+    unit_cost?: number;
+  }): Promise<any[]> => {
+    const response = await api.post('/api/supplier-search/search-from-purchase-requests', data);
+    return response.data;
+  },
+
   getSupplierSearchResults: async (params?: {
     item_description?: string;
     category?: string;

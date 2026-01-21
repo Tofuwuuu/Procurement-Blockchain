@@ -117,6 +117,88 @@ async def search_and_save_suppliers(
     
     return all_suppliers
 
+async def search_suppliers_from_purchase_requests(
+    purchase_request_ids: List[str],
+    stock_property_no: Optional[str] = None,
+    unit: Optional[str] = None,
+    quantity: Optional[int] = None,
+    unit_cost: Optional[float] = None
+) -> List[Dict]:
+    """
+    Extract items from checked purchase requests and search for suppliers
+    based on item descriptions
+    """
+    try:
+        db = await get_database()
+        prs_collection = db.purchase_requests
+        
+        # Find purchase requests by IDs (convert to ObjectId if necessary)
+        from bson import ObjectId
+        
+        object_ids = []
+        for pr_id in purchase_request_ids:
+            try:
+                object_ids.append(ObjectId(pr_id))
+            except:
+                # If not a valid ObjectId, try to match by pr_number
+                pass
+        
+        # Build query
+        query = {
+            "$or": [
+                {"_id": {"$in": object_ids}} if object_ids else {},
+                {"pr_number": {"$in": purchase_request_ids}}
+            ]
+        }
+        # Remove empty $or conditions
+        if "$or" in query:
+            query["$or"] = [q for q in query["$or"] if q]
+        if not query.get("$or"):
+            del query["$or"]
+        
+        # Fetch the purchase requests
+        cursor = prs_collection.find(query)
+        purchase_requests = await cursor.to_list(length=None)
+        
+        # Extract items from purchase requests
+        all_suppliers = []
+        
+        for pr in purchase_requests:
+            items = pr.get("items", [])
+            for item in items:
+                item_desc = item.get("item_description", "General Item")
+                
+                # Search for public suppliers based on item description
+                public_results = search_public_suppliers(item_desc)
+                
+                for supplier in public_results:
+                    # Add additional fields
+                    if stock_property_no:
+                        supplier["stock_property_no"] = stock_property_no
+                    if unit:
+                        supplier["unit"] = unit
+                    if quantity:
+                        supplier["quantity"] = quantity
+                    if unit_cost:
+                        supplier["unit_cost"] = unit_cost
+                    
+                    # Add PR reference
+                    supplier["pr_number"] = pr.get("pr_number", "")
+                    supplier["purchase_request_id"] = str(pr.get("_id", ""))
+                    
+                all_suppliers.extend(public_results)
+        
+        # Save to MongoDB
+        if all_suppliers:
+            saved_suppliers = await save_suppliers_to_db(all_suppliers)
+            return saved_suppliers
+        
+        return all_suppliers
+        
+    except Exception as e:
+        print(f"Error searching suppliers from purchase requests: {str(e)}")
+        return []
+
 def get_suppliers(keyword: str, location: str):
     """Legacy synchronous function - kept for backward compatibility"""
     return search_public_suppliers(keyword, location)

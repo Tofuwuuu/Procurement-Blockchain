@@ -25,3 +25,11 @@ class SupplierSearchRequest(BaseModel):
     item_description: Optional[str] = None
     quantity: Optional[int] = None
     unit_cost: Optional[float] = None
+
+class PurchaseRequestSearchRequest(BaseModel):
+    """Request to search suppliers based on checked purchase requests"""
+    purchase_request_ids: list[str] = []  # IDs of checked purchase requests
+    stock_property_no: Optional[str] = None
+    unit: Optional[str] = None
+    quantity: Optional[int] = None
+    unit_cost: Optional[float] = None

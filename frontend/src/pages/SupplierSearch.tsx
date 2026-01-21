@@ -20,7 +20,13 @@ interface ApprovedPurchaseRequestRow extends PurchaseRequest {
 
 const SupplierSearch: React.FC = () => {
   const { user } = useAuth();
-  const [urls, setUrls] = useState<string[]>(['www.website1.com/', 'www.website2.com/', 'www.website3.com/', 'www.website4.com/']);
+  const [urls, setUrls] = useState<string[]>([
+    'https://en.wikipedia.org/wiki/Laptop',
+    'https://en.wikipedia.org/wiki/Computer_monitor',
+    'https://www.globalsources.com/',
+    'https://data.gov.ph/',
+    'https://www.procurementone.ph/'
+  ]);
   const [newUrl, setNewUrl] = useState('');
   const [formData, setFormData] = useState({
     stockPropertyNo: '',
@@ -112,19 +118,49 @@ const SupplierSearch: React.FC = () => {
   const handleSearch = async () => {
     try {
       setLoading(true);
-      
-      // Prepare search data
-      const searchData = {
-        urls: urls.filter(url => url.trim()),
-        stock_property_no: formData.stockPropertyNo || undefined,
-        unit: formData.unit || undefined,
-        item_description: formData.itemDescription || undefined,
-        quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
-        unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
-      };
 
-      // Call API to search and scrape
-      const results = await apiService.searchSuppliers(searchData);
+      // Get checked purchase request IDs
+      const checkedPRs = approvedPRs.filter(pr => pr.selected).map(pr => pr.id!);
+      
+      // Determine which search to perform
+      const activeUrls = urls.filter(url => url.trim());
+      
+      if (activeUrls.length === 0 && checkedPRs.length === 0) {
+        setToastMessage('Please provide either supplier URLs or select purchase requests to search');
+        setToastType('warning');
+        setShowToast(true);
+        setLoading(false);
+        return;
+      }
+
+      let results: any[] = [];
+
+      // If purchase requests are checked and no URLs provided, search by purchase requests
+      if (checkedPRs.length > 0 && activeUrls.length === 0) {
+        // Call API to search suppliers based on checked purchase requests
+        const searchData = {
+          purchase_request_ids: checkedPRs,
+          stock_property_no: formData.stockPropertyNo || undefined,
+          unit: formData.unit || undefined,
+          quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
+          unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
+        };
+        
+        // Note: This assumes apiService has a method for this. If not, we'll need to add it
+        results = await apiService.searchSuppliersFromPurchaseRequests(searchData);
+      } else {
+        // Standard URL-based search
+        const searchData = {
+          urls: activeUrls,
+          stock_property_no: formData.stockPropertyNo || undefined,
+          unit: formData.unit || undefined,
+          item_description: formData.itemDescription || undefined,
+          quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
+          unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
+        };
+
+        results = await apiService.searchSuppliers(searchData);
+      }
       
       // Format results for display
       const formattedResults = results.map((r: any, index: number) => ({
@@ -188,6 +224,13 @@ const SupplierSearch: React.FC = () => {
     result.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Pagination logic - 10 items per page
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filteredResults.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedResults = filteredResults.slice(startIndex, endIndex);
+
   const allSelected = searchResults.length > 0 && searchResults.every(r => r.selected);
 
   return (
@@ -195,6 +238,12 @@ const SupplierSearch: React.FC = () => {
       <Row>
         <Col>
           <h2 className="mb-4">Supplier Search</h2>
+          <div className="alert alert-info mb-4" role="alert">
+            <i className="bi bi-info-circle"></i>
+            <strong> Reference Data Notice:</strong> When searching suppliers without a URL, the system automatically 
+            extracts item descriptions from checked purchase requests and searches for suppliers based on those keywords. 
+            Retrieved supplier information is presented as reference only and requires manual validation before final selection.
+          </div>
         </Col>
       </Row>
 
@@ -246,6 +295,9 @@ const SupplierSearch: React.FC = () => {
                   >
                     <i className="bi bi-arrow-clockwise"></i>
                   </Button>
+                </div>
+                <div className="text-muted small mb-2">
+                  <i className="bi bi-info-circle"></i> Check items to automatically search suppliers based on their descriptions
                 </div>
                 <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: 8 }}>
                   {loadingApprovedPRs ? (
@@ -359,14 +411,14 @@ const SupplierSearch: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredResults.length === 0 ? (
+                    {paginatedResults.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center text-muted py-4">
                           No results found
                         </td>
                       </tr>
                     ) : (
-                      filteredResults.map((result, index) => (
+                      paginatedResults.map((result, index) => (
                         <tr key={result.no}>
                           <td>{result.no}</td>
                           <td>{result.category}</td>
@@ -401,7 +453,7 @@ const SupplierSearch: React.FC = () => {
                   </Button>
                 </div>
                 <div className="d-flex gap-2 align-items-center">
-                  {[1, 2, 3, 4, 5].map((page) => (
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <Button
                       key={page}
                       variant={currentPage === page ? 'primary' : 'outline-primary'}
@@ -416,8 +468,8 @@ const SupplierSearch: React.FC = () => {
                   <Button
                     variant="outline-primary"
                     size="sm"
-                    onClick={() => setCurrentPage(Math.min(5, currentPage + 1))}
-                    disabled={currentPage === 5}
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
                   >
                     Next
                   </Button>
