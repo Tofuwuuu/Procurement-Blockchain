@@ -284,7 +284,14 @@ const Orders: React.FC = () => {
       },
       delivery_address: pr.office_section,
       notes: pr.remark || '',
-      status: pr.status === 'Pending' ? 'Pending' : pr.status === 'Approved' ? 'Approved' : 'Draft',
+      status:
+        pr.status === 'Pending'
+          ? 'Pending'
+          : pr.status === 'Approved'
+            ? 'Approved'
+            : pr.status === 'Completed'
+              ? 'Completed'
+              : 'Draft',
       total_amount: pr.total_amount,
       date_created: pr.date_created,
       date_updated: pr.date_updated || pr.date_created,
@@ -329,16 +336,25 @@ const Orders: React.FC = () => {
       // Try to fetch from API first
       try {
         if (user?.role === 'employee') {
-          // For employees, fetch purchase requests
+          // For employees, fetch their own purchase requests
           console.log('📥 Fetching purchase requests for employee...');
           const purchaseRequests = await apiService.getPurchaseRequests(true);
           console.log('✅ Fetched purchase requests:', purchaseRequests);
-          // Convert purchase requests to purchase orders format for display
           const convertedOrders: PurchaseOrder[] = mapPurchaseRequestsToOrders(purchaseRequests);
           setOrders(convertedOrders);
           setUsingMockData(false);
+        } else if (user?.role === 'canvasser') {
+          // For canvassers, use real-time PRs and show only "Completed" (ready for Purchase Order stage)
+          console.log('📥 Fetching purchase requests for canvasser...');
+          const purchaseRequests = await apiService.getPurchaseRequests(false);
+          console.log('✅ Fetched purchase requests:', purchaseRequests);
+          const convertedOrders: PurchaseOrder[] = mapPurchaseRequestsToOrders(purchaseRequests).filter(
+            (o) => o.status === 'Completed'
+          );
+          setOrders(convertedOrders);
+          setUsingMockData(false);
         } else {
-          // For other roles, fetch purchase orders
+          // For other roles, fetch purchase orders (if backend supports it)
           const [ordersData, suppliersData, productsData] = await Promise.all([
             apiService.getOrders(),
             apiService.getSuppliers(),
@@ -875,7 +891,14 @@ const Orders: React.FC = () => {
                               <Button
                                 variant="outline-primary"
                                 size="sm"
-                                onClick={() => navigate(`/orders/${order.id}`)}
+                                onClick={() => {
+                                  // For employee/canvasser we navigate using PR number (backend can look up by pr_number)
+                                  if (user?.role === 'employee' || user?.role === 'canvasser') {
+                                    navigate(`/orders/${order.po_number}`);
+                                  } else {
+                                    navigate(`/orders/${order.id}`);
+                                  }
+                                }}
                                 aria-label={`View ${order.po_number}`}
                               >
                                 <i className="bi bi-eye"></i>

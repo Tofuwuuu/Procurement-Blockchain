@@ -1,8 +1,8 @@
 # 🔗 Blockchain Procurement Management System
 
-A full-stack permissioned blockchain application with integrated procurement management platform, built with Node.js backend and React TypeScript frontend. This system provides immutable audit trails for Philippine business procurement processes using custom blockchain implementation.
+A full-stack procurement management platform with **React/TypeScript frontend** and a **FastAPI + MongoDB backend**. The backend also includes a supplier-search feature powered by web scraping utilities under `backend/Scraping/`.
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9.0-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -42,15 +42,15 @@ A full-stack permissioned blockchain application with integrated procurement man
 └─────────────────────┬───────────────────────────────────────┘
                       │ REST API + WebSocket
 ┌─────────────────────▼───────────────────────────────────────┐
-│                  Backend (Node.js)                         │
+│                  Backend (FastAPI)                         │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │  Express    │ │   Blockchain│ │   Smart Contracts   │   │
-│  │   Server    │ │    Core     │ │    Validator        │   │
+│  │  FastAPI    │ │   MongoDB   │ │   Authentication    │   │
+│  │   Server    │ │ (Motor async│ │     (JWT)           │   │
 │  └─────────────┘ └─────────────┘ └─────────────────────┘   │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │   P2P       │ │   Database  │ │   Authentication    │   │
-│  │  Network    │ │  (SQLite)   │ │     (JWT)           │   │
-│  └─────────────┘ └─────────────┘ └─────────────────────┘   │
+│  ┌─────────────┐                                          │
+│  │ Supplier     │  (web scraping + saved results)          │
+│  │ Search       │                                          │
+│  └─────────────┘                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,8 +58,9 @@ A full-stack permissioned blockchain application with integrated procurement man
 
 ### Prerequisites
 
-- Node.js 18+ 
-- npm or yarn
+- Python 3.10+ (recommended)
+- Node.js 18+ (for the React frontend)
+- MongoDB (local or remote)
 - Git
 
 ### Installation
@@ -73,10 +74,10 @@ A full-stack permissioned blockchain application with integrated procurement man
 2. **Backend Setup**
    ```bash
    cd backend
-   npm install
-   
-   # Start genesis node (first node in network)
-   npm run start:genesis
+   python -m venv venv
+   venv\Scripts\activate
+   pip install -r requirements.txt
+   uvicorn main:app --reload --host 0.0.0.0 --port 3003
    ```
 
 3. **Frontend Setup** (in a new terminal)
@@ -89,7 +90,7 @@ A full-stack permissioned blockchain application with integrated procurement man
 4. **Access the Application**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:3003
-   - Blockchain Explorer: Available in the frontend dashboard
+   - API docs: http://localhost:3003/docs
 
 ### Running Multiple Nodes
 

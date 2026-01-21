@@ -601,6 +601,12 @@ async def update_purchase_request(
             update_doc["items"] = [item.dict() for item in update_data.items]
             # Recalculate total amount if items changed
             update_doc["total_amount"] = sum(item.total_cost for item in update_data.items)
+        if getattr(update_data, "suppliers", None) is not None:
+            update_doc["suppliers"] = [s.dict() for s in update_data.suppliers] if update_data.suppliers else []
+        if getattr(update_data, "selected_supplier_ids", None) is not None:
+            update_doc["selected_supplier_ids"] = update_data.selected_supplier_ids or []
+        if getattr(update_data, "canvass_submitted_at", None) is not None:
+            update_doc["canvass_submitted_at"] = update_data.canvass_submitted_at
 
         # If canvasser approves, generate CC ref number if missing
         new_status = update_doc.get("status")

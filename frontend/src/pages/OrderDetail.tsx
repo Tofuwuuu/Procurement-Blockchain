@@ -4,7 +4,7 @@ import {
   Container, Row, Col, Card, Table, Badge, Button, 
   Modal, Alert, Spinner, ButtonGroup
 } from 'react-bootstrap';
-import { apiService, PurchaseOrder } from '../services/api';
+import { apiService, PurchaseOrder, PurchaseRequest } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
@@ -18,7 +18,9 @@ const OrderDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
@@ -34,74 +36,133 @@ const OrderDetail: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Try to fetch from API, fallback to mock data
-      let orderData: PurchaseOrder;
-      try {
-        orderData = await apiService.getOrder(parseInt(id!));
-      } catch (apiError) {
-        console.log('API not available, using mock data...');
-        // Create mock order data
-        orderData = {
-          id: parseInt(id!),
-          po_number: `PO-20250101-${id!.padStart(3, '0')}`,
-          supplier_id: 1,
+      // For employee/canvasser we use purchase requests (real-time)
+      if (user?.role === 'employee' || user?.role === 'canvasser') {
+        let pr: PurchaseRequest | null = null;
+        try {
+          // id for these roles is the pr_number (e.g., PR-...)
+          pr = await apiService.getPurchaseRequest(id!);
+        } catch (e) {
+          // fallback: try numeric if needed
+          pr = await apiService.getPurchaseRequest(id!);
+        }
+        if (!pr) throw new Error('Purchase request not found');
+        const mapped: PurchaseOrder = {
+          id: parseInt(pr.id) || hashString(pr.id),
+          po_number: pr.pr_number,
+          supplier_id: 0,
           supplier: {
-            id: 1,
-            name: "TechDistributors Inc",
-            address: "123 Tech Street, Makati City",
-            province: "Metro Manila",
-            contact_person: "John Smith",
-            phone: "+63 2 1234 5678",
-            email: "john@techdistributors.com",
-            bir_tin: "123-456-789-000",
+            id: 0,
+            name: pr.entity_name || pr.requested_by || 'N/A',
+            address: '',
+            province: '',
+            contact_person: '',
+            phone: '',
+            email: '',
+            bir_tin: '',
             is_active: true,
-            created_at: "2025-01-01T00:00:00Z",
-            updated_at: "2025-01-01T00:00:00Z"
+            created_at: pr.date_created,
+            updated_at: pr.date_updated || pr.date_created
           },
-          delivery_address: "Philippine Procurement Solutions, 123 Ayala Avenue, Makati City",
-          notes: "Urgent delivery required",
-          status: "Pending",
-          total_amount: 75000.00,
-          date_created: "2025-01-01T10:30:00Z",
-          date_updated: "2025-01-01T10:30:00Z",
-          items: [
-            {
-              id: 1,
-              product_id: 1,
-              product: {
-                id: 1,
-                name: "Laptop Computer",
-                description: "High-performance laptop for office use",
-                unit: "piece",
-                unit_price: 45000.00,
-                category: "Electronics",
-                is_active: true
-              },
-              quantity: 1,
-              unit_price: 45000.00,
-              total_price: 45000.00
+          delivery_address: pr.office_section,
+          notes: pr.remark || '',
+          status:
+            pr.status === 'Pending'
+              ? 'Pending'
+              : pr.status === 'Approved'
+                ? 'Approved'
+                : pr.status === 'Completed'
+                  ? 'Completed'
+                  : 'Draft',
+          total_amount: pr.total_amount,
+          date_created: pr.date_created,
+          date_updated: pr.date_updated || pr.date_created,
+          items: pr.items.map((item, index) => ({
+            id: index + 1,
+            product_id: index + 1,
+            product: {
+              id: index + 1,
+              name: item.item_description,
+              description: item.item_description,
+              unit: item.unit,
+              unit_price: item.unit_cost,
+              category: '',
+              is_active: true
             },
-            {
-              id: 2,
-              product_id: 2,
-              product: {
-                id: 2,
-                name: "Office Chair",
-                description: "Ergonomic office chair",
-                unit: "piece",
-                unit_price: 15000.00,
-                category: "Furniture",
-                is_active: true
-              },
-              quantity: 2,
-              unit_price: 15000.00,
-              total_price: 30000.00
-            }
-          ]
+            quantity: item.quantity,
+            unit_price: item.unit_cost,
+            total_price: item.total_cost
+          }))
         };
+        setOrder(mapped);
+      } else {
+        // Admin/other roles: Try real purchase order API, fallback to mock
+        let orderData: PurchaseOrder;
+        try {
+          orderData = await apiService.getOrder(parseInt(id!));
+        } catch (apiError) {
+          console.log('API not available, using mock data...');
+          orderData = {
+            id: parseInt(id!),
+            po_number: `PO-20250101-${id!.padStart(3, '0')}`,
+            supplier_id: 1,
+            supplier: {
+              id: 1,
+              name: "TechDistributors Inc",
+              address: "123 Tech Street, Makati City",
+              province: "Metro Manila",
+              contact_person: "John Smith",
+              phone: "+63 2 1234 5678",
+              email: "john@techdistributors.com",
+              bir_tin: "123-456-789-000",
+              is_active: true,
+              created_at: "2025-01-01T00:00:00Z",
+              updated_at: "2025-01-01T00:00:00Z"
+            },
+            delivery_address: "Philippine Procurement Solutions, 123 Ayala Avenue, Makati City",
+            notes: "Urgent delivery required",
+            status: "Pending",
+            total_amount: 75000.00,
+            date_created: "2025-01-01T10:30:00Z",
+            date_updated: "2025-01-01T10:30:00Z",
+            items: [
+              {
+                id: 1,
+                product_id: 1,
+                product: {
+                  id: 1,
+                  name: "Laptop Computer",
+                  description: "High-performance laptop for office use",
+                  unit: "piece",
+                  unit_price: 45000.00,
+                  category: "Electronics",
+                  is_active: true
+                },
+                quantity: 1,
+                unit_price: 45000.00,
+                total_price: 45000.00
+              },
+              {
+                id: 2,
+                product_id: 2,
+                product: {
+                  id: 2,
+                  name: "Office Chair",
+                  description: "Ergonomic office chair",
+                  unit: "piece",
+                  unit_price: 15000.00,
+                  category: "Furniture",
+                  is_active: true
+                },
+                quantity: 2,
+                unit_price: 15000.00,
+                total_price: 30000.00
+              }
+            ]
+          };
+        }
+        setOrder(orderData);
       }
-      
-      setOrder(orderData);
     } catch (err) {
       console.error('Error fetching order details:', err);
       setError('Failed to load order details');
@@ -172,6 +233,30 @@ const OrderDetail: React.FC = () => {
     }
   };
 
+  // Canvasser confirm (marks PR as Completed again to persist any change and acknowledge)
+  const handleConfirm = async () => {
+    if (!order || !(user?.role === 'canvasser' || user?.role === 'employee')) return;
+    try {
+      setConfirming(true);
+      setShowSubmitConfirmModal(false);
+      try {
+        await apiService.updatePurchaseRequest(order.po_number, {
+          status: 'Completed'
+        } as any);
+        setToastMessage('Purchase order confirmed.');
+        setToastType('success');
+        setShowToast(true);
+      } catch (err) {
+        console.error('Failed to confirm order:', err);
+        setToastMessage('Failed to confirm order. Please try again.');
+        setToastType('error');
+        setShowToast(true);
+      }
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
@@ -208,6 +293,17 @@ const OrderDetail: React.FC = () => {
 
   const handleToastClose = () => {
     setShowToast(false);
+  };
+
+  // Simple string hash helper (same logic as Orders.tsx)
+  const hashString = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // 32bit int
+    }
+    return Math.abs(hash);
   };
 
   if (loading) {
@@ -267,6 +363,15 @@ const OrderDetail: React.FC = () => {
                       Approve Order
                     </>
                   )}
+                </Button>
+              )}
+              {(user?.role === 'canvasser' || user?.role === 'employee') && (
+                <Button
+                  variant="primary"
+                  onClick={() => setShowSubmitConfirmModal(true)}
+                  disabled={confirming}
+                >
+                  {confirming ? 'Confirming...' : 'Confirm'}
                 </Button>
               )}
             </div>
@@ -405,6 +510,24 @@ const OrderDetail: React.FC = () => {
           <Button variant="success" onClick={handleApprove}>
             <i className="bi bi-check-circle me-2"></i>
             Approve Order
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Confirm (canvasser) Modal */}
+      <Modal show={showSubmitConfirmModal} onHide={() => setShowSubmitConfirmModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Purchase Order</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>Confirm this purchase order is ready and matches the completed canvass.</p>
+          <p><strong>PO Number:</strong> {order.po_number}</p>
+          <p><strong>Total Amount:</strong> {formatCurrency(order.total_amount)}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSubmitConfirmModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleConfirm} disabled={confirming}>
+            {confirming ? 'Confirming...' : 'Confirm'}
           </Button>
         </Modal.Footer>
       </Modal>

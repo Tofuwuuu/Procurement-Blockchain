@@ -331,6 +331,20 @@ export interface PurchaseRequest {
   total_amount: number;
   date_created: string;
   date_updated?: string;
+  suppliers?: Array<{
+    supplier_id?: string;
+    name?: string;
+    address?: string;
+    unit_price?: number;
+    item_description?: string;
+    contact_person?: string;
+    phone?: string;
+    email?: string;
+    source?: string;
+    date_added?: string;
+  }>;
+  selected_supplier_ids?: string[];
+  canvass_submitted_at?: string;
 }
 
 // ===== SETTINGS TYPES =====
@@ -726,6 +740,13 @@ export const apiService = {
     return response.data;
   },
 
+  addSuppliersToCanvass: async (data: {
+    purchase_request_id: string;
+    supplier_ids: string[];
+  }): Promise<any> => {
+    const response = await api.post('/api/supplier-search/add-to-canvass', data);
+    return response.data;
+  },
 
 };
 

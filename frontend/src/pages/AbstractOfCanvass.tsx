@@ -18,13 +18,19 @@ const AbstractOfCanvass: React.FC = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadRequests();
-    loadSuppliers();
   }, []);
+
+  // Reload requests when modal opens to get latest data
+  useEffect(() => {
+    if (showDetailModal) {
+      loadRequests();
+    }
+  }, [showDetailModal]);
 
   const loadRequests = async () => {
     try {
@@ -42,19 +48,33 @@ const AbstractOfCanvass: React.FC = () => {
     }
   };
 
-  const loadSuppliers = async () => {
-    try {
-      const data = await apiService.getSuppliers();
-      setSuppliers(data);
-    } catch (err) {
-      console.error('Failed to load suppliers:', err);
-      // Continue without suppliers - use mock data if needed
-    }
+  const openDetailModal = (request: PurchaseRequest) => {
+    // Always fetch the latest PR doc (suppliers can be added from Supplier Search)
+    setSelectedRequest(null);
+    setSelectedSupplierIds([]);
+    setShowDetailModal(true);
+    apiService
+      .getPurchaseRequest(request.id)
+      .then((fresh) => {
+        setSelectedRequest(fresh);
+        setSelectedSupplierIds(fresh.selected_supplier_ids || []);
+      })
+      .catch(() => {
+        // Fallback to whatever we already have in memory
+        const latestRequest = requests.find((r) => r.id === request.id);
+        const fallback = latestRequest || request;
+        setSelectedRequest(fallback);
+        setSelectedSupplierIds(fallback.selected_supplier_ids || []);
+      });
   };
 
-  const openDetailModal = (request: PurchaseRequest) => {
-    setSelectedRequest(request);
-    setShowDetailModal(true);
+  const toggleSupplierSelected = (supplier: any) => {
+    const supplierId = supplier?.supplier_id || supplier?.id || supplier?._id;
+    if (!supplierId) return;
+
+    setSelectedSupplierIds((prev) =>
+      prev.includes(supplierId) ? prev.filter((id) => id !== supplierId) : [...prev, supplierId]
+    );
   };
 
   const handleSubmitCanvass = async () => {
@@ -63,7 +83,11 @@ const AbstractOfCanvass: React.FC = () => {
       setSubmitting(true);
       // Update status to indicate canvassing is complete
       // This might need to be a different status or create a canvass record
-      await apiService.updatePurchaseRequest(selectedRequest.id, { status: 'Completed' });
+      await apiService.updatePurchaseRequest(selectedRequest.id, {
+        status: 'Completed',
+        selected_supplier_ids: selectedSupplierIds,
+        canvass_submitted_at: new Date().toISOString(),
+      } as any);
       setToastMessage('Abstract of Canvass submitted successfully');
       setToastType('success');
       setShowToast(true);
@@ -82,14 +106,13 @@ const AbstractOfCanvass: React.FC = () => {
   // Generate mock supplier-item-price entries for demonstration
   const getSupplierCanvassItems = (request: PurchaseRequest) => {
     const items: string[] = [];
-    suppliers.slice(0, 3).forEach((supplier) => {
-      request.items.forEach((item) => {
-        // Mock price variation (80% to 120% of original unit cost)
-        const priceVariation = 0.8 + Math.random() * 0.4;
-        const canvassPrice = (item.unit_cost * priceVariation).toFixed(2);
-        items.push(`${supplier.name} | ${item.item_description} | ${canvassPrice}`);
+    if ((request as any).suppliers && (request as any).suppliers.length > 0) {
+      (request as any).suppliers.forEach((supplier: any) => {
+        request.items.forEach((item) => {
+          items.push(`${supplier.name} | ${item.item_description} | ${supplier.unit_price || item.unit_cost}`);
+        });
       });
-    });
+    }
     return items;
   };
 
@@ -197,7 +220,7 @@ const AbstractOfCanvass: React.FC = () => {
       <Modal 
         show={showDetailModal} 
         onHide={() => setShowDetailModal(false)} 
-        size="lg" 
+        size="xl" 
         centered
       >
         <Modal.Header closeButton>
@@ -206,72 +229,127 @@ const AbstractOfCanvass: React.FC = () => {
         <Modal.Body>
           {selectedRequest && (
             <>
+              {/* PR Details Section */}
+              <Row className="mb-4">
+                <Col md={6}>
+                  <div className="border rounded p-3">
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">Reference No.</div>
+                      <div className="col-6">{selectedRequest.ref_number || 'N/A'}</div>
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">PR No.</div>
+                      <div className="col-6">{selectedRequest.pr_number}</div>
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">Date Requested</div>
+                      <div className="col-6">{formatDate(selectedRequest.date_created)}</div>
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">Date Approved</div>
+                      <div className="col-6">{selectedRequest.date_updated ? formatDate(selectedRequest.date_updated) : 'N/A'}</div>
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">Requested by</div>
+                      <div className="col-6">{selectedRequest.requested_by || selectedRequest.entity_name}</div>
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6 fw-bold">Designation</div>
+                      <div className="col-6">Staff</div>
+                    </div>
+                    <div className="row">
+                      <div className="col-6 fw-bold">Office/Section</div>
+                      <div className="col-6">{selectedRequest.office_section}</div>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+
               {/* List of Items Section */}
-              <h6 className="fw-bold mb-3">LIST OF ITEMS</h6>
+              <h6 className="fw-bold mb-3">LIST OF ITEM</h6>
               <div className="table-responsive mb-4">
-                <Table bordered>
-                  <thead>
+                <Table bordered striped size="sm">
+                  <thead className="bg-light">
                     <tr>
-                      <th>UNIT</th>
-                      <th>ITEM DESCRIPTION</th>
-                      <th>QUANTITY</th>
-                      <th>UNIT COST</th>
-                      <th>TOTAL COST</th>
+                      <th>Stock/ Property No.</th>
+                      <th>Unit</th>
+                      <th>Item Description</th>
+                      <th>Quantity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {selectedRequest.items.map((item, idx) => (
                       <tr key={idx}>
                         <td>{item.unit}</td>
+                        <td>{item.unit}</td>
                         <td>{item.item_description}</td>
                         <td>{item.quantity}</td>
-                        <td>
-                          {new Intl.NumberFormat('en-PH', { 
-                            style: 'currency', 
-                            currency: 'PHP',
-                            minimumFractionDigits: 2 
-                          }).format(item.unit_cost)}
-                        </td>
-                        <td>
-                          {new Intl.NumberFormat('en-PH', { 
-                            style: 'currency', 
-                            currency: 'PHP',
-                            minimumFractionDigits: 2 
-                          }).format(item.total_cost)}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               </div>
 
-              {/* Supplier Section */}
+              {/* Choose Suppliers Section */}
+              <h6 className="fw-bold mb-3">Choose Suppliers</h6>
               <Row>
-                <Col md={12}>
-                  <div className="d-flex mb-3">
-                    <h6 className="fw-bold me-3">SUPPLIER</h6>
-                  </div>
-                  <div 
-                    style={{ 
-                      maxHeight: '300px', 
-                      overflowY: 'auto', 
-                      border: '1px solid #dee2e6',
-                      padding: '10px',
-                      borderRadius: '4px'
-                    }}
-                  >
-                    {getSupplierCanvassItems(selectedRequest).map((item, idx) => (
-                      <div key={idx} className="mb-2" style={{ fontSize: '0.9rem' }}>
-                        {item}
-                      </div>
-                    ))}
-                    {suppliers.length === 0 && (
-                      <div className="text-muted text-center py-3">
-                        No suppliers available. Loading supplier data...
-                      </div>
-                    )}
-                  </div>
-                </Col>
+                {(selectedRequest as any).suppliers && (selectedRequest as any).suppliers.length > 0 ? (
+                  (selectedRequest as any).suppliers.slice(0, 3).map((supplier: any, idx: number) => (
+                    <Col md={4} key={idx} className="mb-3">
+                      <Card
+                        className={`h-100 ${selectedSupplierIds.includes(supplier?.supplier_id) ? 'border border-2 border-primary' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleSupplierSelected(supplier)}
+                        onKeyDown={(e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') toggleSupplierSelected(supplier);
+                        }}
+                        aria-pressed={selectedSupplierIds.includes(supplier?.supplier_id)}
+                      >
+                        <Card.Body>
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <h6 className="fw-bold mb-0">Supplier {idx + 1}</h6>
+                            {selectedSupplierIds.includes(supplier?.supplier_id) && (
+                              <span className="text-primary fw-semibold">
+                                <i className="bi bi-check-circle-fill me-1"></i>
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <div className="mb-3">
+                            <label className="text-muted small">Name</label>
+                            <div className="form-control-plaintext fw-semibold">{supplier.name || 'Unknown'}</div>
+                          </div>
+                          <div className="mb-3">
+                            <label className="text-muted small">Unit Price</label>
+                            <div className="form-control-plaintext fw-semibold">
+                              {new Intl.NumberFormat('en-PH', { 
+                                style: 'currency', 
+                                currency: 'PHP',
+                                minimumFractionDigits: 2 
+                              }).format(supplier.unit_price || 0)}
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <label className="text-muted small">Item Description</label>
+                            <div className="form-control-plaintext fw-semibold text-break">{supplier.item_description || 'N/A'}</div>
+                          </div>
+                          <div>
+                            <label className="text-muted small">Source</label>
+                            <div className="form-control-plaintext fw-semibold">{supplier.source || 'Web Scraping'}</div>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  ))
+                ) : (
+                  <Col md={12}>
+                    <div className="alert alert-info">
+                      <i className="bi bi-info-circle me-2"></i>
+                      No suppliers available. Please add suppliers from Supplier Search.
+                    </div>
+                  </Col>
+                )}
               </Row>
             </>
           )}

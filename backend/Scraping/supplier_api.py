@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
+from datetime import datetime
 from service import search_and_save_suppliers, get_suppliers_from_db, search_suppliers_from_purchase_requests
-from schema import SupplierOut, SupplierSearchRequest, PurchaseRequestSearchRequest
+from schema import SupplierOut, SupplierSearchRequest, PurchaseRequestSearchRequest, AddSuppliersToCanvassRequest
 from security import require_canvasser
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database import get_database
+from bson.objectid import ObjectId
 
 router = APIRouter(prefix="/api/supplier-search", tags=["Supplier Search"])
 
@@ -164,3 +170,90 @@ async def search_suppliers_from_purchase_requests_endpoint(
             detail=f"Error searching suppliers from purchase requests: {str(e)}"
         )
 
+@router.post("/add-to-canvass")
+async def add_suppliers_to_canvass(
+    request: AddSuppliersToCanvassRequest,
+    user=Depends(require_canvasser)
+):
+    """
+    Add selected suppliers to a Purchase Request for canvassing.
+    This endpoint saves the supplier selection to the PR document in MongoDB.
+    """
+    try:
+        print(f"🔍 add-to-canvass request: PR ID={request.purchase_request_id}, Supplier IDs={request.supplier_ids}")
+        
+        db = await get_database()
+        
+        # Validate PR exists
+        pr_collection = db.get_collection("purchase_requests")
+        pr = await pr_collection.find_one({"_id": ObjectId(request.purchase_request_id)})
+        
+        if not pr:
+            print(f"❌ PR not found: {request.purchase_request_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Purchase Request not found: {request.purchase_request_id}"
+            )
+        
+        print(f"✅ PR found: {pr.get('pr_number')}")
+        
+        # Fetch supplier details from supplier_search_results
+        supplier_collection = db.get_collection("supplier_search_results")
+        suppliers = []
+        
+        for supplier_id in request.supplier_ids:
+            try:
+                print(f"🔍 Looking for supplier: {supplier_id}")
+                supplier = await supplier_collection.find_one({"_id": ObjectId(supplier_id)})
+                if supplier:
+                    # Store the FULL supplier info so canvassing can use all fields later.
+                    # Keep Mongo _id as supplier_id string and strip ObjectId fields.
+                    supplier_data = dict(supplier)
+                    supplier_data.pop("_id", None)
+                    supplier_data.pop("id", None)
+                    supplier_data["supplier_id"] = str(supplier.get("_id"))
+                    # Normalize a few fields used by the UI
+                    supplier_data["name"] = supplier.get("supplier_name") or supplier.get("name")
+                    supplier_data["date_added"] = datetime.now().isoformat()
+                    suppliers.append(supplier_data)
+                    print(f"✅ Supplier added: {supplier_data.get('name')}")
+                else:
+                    print(f"⚠️ Supplier not found: {supplier_id}")
+            except Exception as e:
+                print(f"❌ Error processing supplier {supplier_id}: {str(e)}")
+        
+        print(f"📊 Total suppliers to add: {len(suppliers)}")
+        
+        # Add suppliers to PR
+        update_result = await pr_collection.update_one(
+            {"_id": ObjectId(request.purchase_request_id)},
+            {
+                "$set": {
+                    "suppliers": suppliers,
+                    "date_updated": datetime.now().isoformat()
+                }
+            }
+        )
+        
+        print(f"💾 Update result: modified_count={update_result.modified_count}")
+        
+        if update_result.modified_count == 0:
+            print(f"❌ Failed to update PR")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to add suppliers to purchase request"
+            )
+        
+        return {
+            "success": True,
+            "message": f"Added {len(suppliers)} supplier(s) to purchase request",
+            "purchase_request_id": request.purchase_request_id,
+            "suppliers_added": len(suppliers)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error adding suppliers to canvass: {str(e)}"
+        )

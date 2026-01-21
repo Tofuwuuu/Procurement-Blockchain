@@ -33,3 +33,8 @@ class PurchaseRequestSearchRequest(BaseModel):
     unit: Optional[str] = None
     quantity: Optional[int] = None
     unit_cost: Optional[float] = None
+
+class AddSuppliersToCanvassRequest(BaseModel):
+    """Request to add selected suppliers to a purchase request for canvassing"""
+    purchase_request_id: str
+    supplier_ids: list[str]  # IDs of suppliers to add

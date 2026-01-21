@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Button, Table, InputGroup } from 'react-bootstrap';
+import { Container, Row, Col, Card, Form, Button, Table, InputGroup, Modal } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService, PurchaseRequest } from '../services/api';
 import Toast from '../components/Toast';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 interface SearchResult {
+  id?: string;
   no: number;
   category: string;
   itemDescription: string;
@@ -50,6 +51,9 @@ const SupplierSearch: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
   const [loadingApprovedPRs, setLoadingApprovedPRs] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedPRForCanvass, setSelectedPRForCanvass] = useState<string>('');
+  const [addingToCanvass, setAddingToCanvass] = useState(false);
 
   // Load saved results on mount
   useEffect(() => {
@@ -62,6 +66,7 @@ const SupplierSearch: React.FC = () => {
       setLoadingResults(true);
       const results = await apiService.getSupplierSearchResults({ limit: 100 });
       const formattedResults = results.map((r: any, index: number) => ({
+        id: r.id || r._id,
         no: index + 1,
         category: r.category || 'General',
         itemDescription: r.item_description || '',
@@ -164,6 +169,7 @@ const SupplierSearch: React.FC = () => {
       
       // Format results for display
       const formattedResults = results.map((r: any, index: number) => ({
+        id: r.id || r._id,
         no: index + 1,
         category: r.category || 'General',
         itemDescription: r.item_description || '',
@@ -199,15 +205,58 @@ const SupplierSearch: React.FC = () => {
   const handleAddSelected = () => {
     const selected = searchResults.filter(r => r.selected);
     if (selected.length === 0) {
-      setToastMessage('Please select at least one item');
+      setToastMessage('Please select at least one supplier');
       setToastType('warning');
       setShowToast(true);
       return;
     }
-    // TODO: Implement add to abstract of canvass
-    setToastMessage(`Added ${selected.length} item(s) to Abstract of Canvass`);
-    setToastType('success');
-    setShowToast(true);
+    // Show modal to select PR
+    setShowAddModal(true);
+  };
+
+  const handleConfirmAddToCanvass = async () => {
+    if (!selectedPRForCanvass) {
+      setToastMessage('Please select a purchase request');
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
+
+    try {
+      setAddingToCanvass(true);
+      const selected = searchResults.filter(r => r.selected);
+      
+      // Use the actual supplier IDs from the results, filtering out undefined
+      const supplierIds = selected.map(s => s.id).filter((id): id is string => Boolean(id));
+
+      if (supplierIds.length === 0) {
+        setToastMessage('No valid supplier IDs found');
+        setToastType('warning');
+        setShowToast(true);
+        return;
+      }
+
+      await apiService.addSuppliersToCanvass({
+        purchase_request_id: selectedPRForCanvass,
+        supplier_ids: supplierIds
+      });
+
+      setToastMessage(`Added ${selected.length} supplier(s) to the purchase request`);
+      setToastType('success');
+      setShowToast(true);
+
+      // Clear selections
+      setSearchResults(results => results.map(r => ({ ...r, selected: false })));
+      setShowAddModal(false);
+      setSelectedPRForCanvass('');
+    } catch (error: any) {
+      console.error('Error adding suppliers to canvass:', error);
+      setToastMessage(error.response?.data?.detail || 'Failed to add suppliers to canvass');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setAddingToCanvass(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -486,6 +535,46 @@ const SupplierSearch: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* Add to Canvass Modal */}
+      <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Add to Abstract of Canvass</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>Select the purchase request to add the selected suppliers:</p>
+          <Form.Group>
+            <Form.Label>Purchase Request</Form.Label>
+            <Form.Select
+              value={selectedPRForCanvass}
+              onChange={(e) => setSelectedPRForCanvass(e.target.value)}
+            >
+              <option value="">-- Choose a PR --</option>
+              {approvedPRs.map((pr) => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.pr_number} - {pr.entity_name} ({pr.office_section})
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button 
+            variant="secondary" 
+            onClick={() => setShowAddModal(false)}
+            disabled={addingToCanvass}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="primary" 
+            onClick={handleConfirmAddToCanvass}
+            disabled={addingToCanvass}
+          >
+            {addingToCanvass ? 'Adding...' : 'Add to Canvass'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <Toast
         show={showToast}
