@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Form, Button, Table, InputGroup } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/api';
+import { apiService, PurchaseRequest } from '../services/api';
 import Toast from '../components/Toast';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -11,6 +11,10 @@ interface SearchResult {
   itemDescription: string;
   unitPrice: number;
   supplierName: string;
+  selected: boolean;
+}
+
+interface ApprovedPurchaseRequestRow extends PurchaseRequest {
   selected: boolean;
 }
 
@@ -25,6 +29,7 @@ const SupplierSearch: React.FC = () => {
     quantity: '',
     unitCost: ''
   });
+  const [approvedPRs, setApprovedPRs] = useState<ApprovedPurchaseRequestRow[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([
     { no: 1, category: 'Computer', itemDescription: 'Brand X Printer', unitPrice: 4700.00, supplierName: 'Company Name 1', selected: true },
     { no: 2, category: 'Computer', itemDescription: 'Brand Y Printer', unitPrice: 4899.00, supplierName: 'Company Name 2', selected: false },
@@ -38,10 +43,12 @@ const SupplierSearch: React.FC = () => {
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [loading, setLoading] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [loadingApprovedPRs, setLoadingApprovedPRs] = useState(false);
 
   // Load saved results on mount
   useEffect(() => {
     loadSavedResults();
+    loadApprovedPurchaseRequests();
   }, []);
 
   const loadSavedResults = async () => {
@@ -62,6 +69,22 @@ const SupplierSearch: React.FC = () => {
       // Keep mock data if API fails
     } finally {
       setLoadingResults(false);
+    }
+  };
+
+  const loadApprovedPurchaseRequests = async () => {
+    try {
+      setLoadingApprovedPRs(true);
+      const prs = await apiService.getPurchaseRequests(false);
+      const approved = prs
+        .filter((pr) => pr.status?.toLowerCase() === 'approved')
+        .map((pr) => ({ ...pr, selected: false }));
+      setApprovedPRs(approved);
+    } catch (error) {
+      console.error('Failed to load approved purchase requests:', error);
+      setApprovedPRs([]);
+    } finally {
+      setLoadingApprovedPRs(false);
     }
   };
 
@@ -176,107 +199,86 @@ const SupplierSearch: React.FC = () => {
       </Row>
 
       <Row>
-        {/* Left Section - Search Form */}
         <Col md={4}>
-          <Card>
+          <Card className="mb-3">
+            <Card.Header>
+              <div className="d-flex justify-content-between align-items-center">
+                <Form.Label className="fw-semibold mb-0">URL</Form.Label>
+                <Button variant="primary" size="sm" onClick={handleAddUrl}>
+                  Add
+                </Button>
+              </div>
+            </Card.Header>
             <Card.Body>
-              <Form>
-                {/* URL Section */}
-                <div className="mb-3">
-                  <Form.Label className="fw-semibold">URL</Form.Label>
-                  {urls.map((url, index) => (
-                    <InputGroup key={index} className="mb-2">
-                      <Form.Control
-                        value={url}
-                        onChange={(e) => handleUrlChange(index, e.target.value)}
-                        placeholder="www.example.com/"
-                      />
-                      <Button
-                        variant="outline-danger"
-                        onClick={() => handleRemoveUrl(index)}
-                      >
-                        <i className="bi bi-x"></i>
-                      </Button>
-                    </InputGroup>
-                  ))}
-                  <InputGroup>
-                    <Form.Control
-                      value={newUrl}
-                      onChange={(e) => setNewUrl(e.target.value)}
-                      placeholder="www.example.com/"
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddUrl()}
-                    />
-                    <Button variant="primary" onClick={handleAddUrl}>
-                      Add
-                    </Button>
-                  </InputGroup>
+              {urls.map((url, index) => (
+                <InputGroup key={index} className="mb-2">
+                  <Form.Control
+                    value={url}
+                    onChange={(e) => handleUrlChange(index, e.target.value)}
+                    placeholder="www.example.com/"
+                  />
+                  <Button variant="outline-danger" onClick={() => handleRemoveUrl(index)}>
+                    <i className="bi bi-x"></i>
+                  </Button>
+                </InputGroup>
+              ))}
+              <InputGroup>
+                <Form.Control
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="www.example.com/"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
+                />
+                <Button variant="primary" onClick={handleAddUrl}>
+                  Add
+                </Button>
+              </InputGroup>
+
+              {/* Approved PR mini list */}
+              <div className="mt-4">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <Form.Label className="fw-semibold mb-0">Approved Purchase Requests</Form.Label>
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    onClick={loadApprovedPurchaseRequests}
+                    disabled={loadingApprovedPRs}
+                  >
+                    <i className="bi bi-arrow-clockwise"></i>
+                  </Button>
                 </div>
-
-                {/* Stock/Property No. */}
-                <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold">Stock/Property No.</Form.Label>
-                  <Form.Control
-                    value={formData.stockPropertyNo}
-                    onChange={(e) => handleInputChange('stockPropertyNo', e.target.value)}
-                    placeholder=""
-                  />
-                </Form.Group>
-
-                {/* Unit */}
-                <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold">Unit</Form.Label>
-                  <Form.Control
-                    value={formData.unit}
-                    onChange={(e) => handleInputChange('unit', e.target.value)}
-                    placeholder=""
-                  />
-                </Form.Group>
-
-                {/* Item Description */}
-                <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold">Item Description</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={formData.itemDescription}
-                    onChange={(e) => handleInputChange('itemDescription', e.target.value)}
-                    placeholder=""
-                  />
-                </Form.Group>
-
-                {/* Quantity and Unit Cost Row */}
-                <Row>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label className="fw-semibold">Quantity</Form.Label>
-                      <Form.Control
-                        type="number"
-                        value={formData.quantity}
-                        onChange={(e) => handleInputChange('quantity', e.target.value)}
-                        placeholder=""
+                <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: 8 }}>
+                  {loadingApprovedPRs ? (
+                    <div className="text-center py-2">
+                      <LoadingSpinner size="sm" text="Loading..." />
+                    </div>
+                  ) : approvedPRs.length === 0 ? (
+                    <div className="text-muted">No approved purchase requests</div>
+                  ) : (
+                    approvedPRs.map((pr) => (
+                      <Form.Check
+                        key={pr.id}
+                        type="checkbox"
+                        checked={pr.selected}
+                        onChange={() =>
+                          setApprovedPRs((rows) =>
+                            rows.map((r) => (r.id === pr.id ? { ...r, selected: !r.selected } : r))
+                          )
+                        }
+                        label={`${pr.pr_number} • ${pr.entity_name || ''}`}
+                        className="mb-1"
                       />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label className="fw-semibold">Unit Cost</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        value={formData.unitCost}
-                        onChange={(e) => handleInputChange('unitCost', e.target.value)}
-                        placeholder=""
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
+                    ))
+                  )}
+                </div>
+              </div>
 
-                {/* Search Button */}
+              <div className="mt-3">
                 <Button 
                   variant="success" 
                   size="lg" 
-                  onClick={handleSearch} 
                   className="w-100"
+                  onClick={handleSearch} 
                   disabled={loading}
                 >
                   {loading ? (
@@ -291,12 +293,11 @@ const SupplierSearch: React.FC = () => {
                     </>
                   )}
                 </Button>
-              </Form>
+              </div>
             </Card.Body>
           </Card>
         </Col>
 
-        {/* Right Section - Results Table */}
         <Col md={8}>
           <Card>
             <Card.Header>
