@@ -19,6 +19,7 @@ const AbstractOfCanvass: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<number | null>(null);
 
   useEffect(() => {
     loadRequests();
@@ -55,6 +56,7 @@ const AbstractOfCanvass: React.FC = () => {
     } else {
       setSelectedRequest(request);
     }
+    setSelectedSupplier(null); // Reset supplier selection
     setShowDetailModal(true);
   };
 
@@ -273,9 +275,33 @@ const AbstractOfCanvass: React.FC = () => {
                 {(selectedRequest as any).suppliers && (selectedRequest as any).suppliers.length > 0 ? (
                   (selectedRequest as any).suppliers.slice(0, 3).map((supplier: any, idx: number) => (
                     <Col md={4} key={idx} className="mb-3">
-                      <Card className="h-100">
+                      <Card 
+                        className={`h-100 cursor-pointer ${selectedSupplier === idx ? 'border-success border-3' : 'border-1'}`}
+                        onClick={() => setSelectedSupplier(idx)}
+                        style={{ 
+                          cursor: 'pointer', 
+                          transition: 'all 0.2s ease',
+                          backgroundColor: selectedSupplier === idx ? '#f0f8ff' : 'white'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (selectedSupplier !== idx) {
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.boxShadow = '';
+                        }}
+                      >
                         <Card.Body>
-                          <h6 className="fw-bold mb-3">Supplier {idx + 1}</h6>
+                          <div className="d-flex justify-content-between align-items-start mb-3">
+                            <h6 className="fw-bold mb-0">Supplier {idx + 1}</h6>
+                            {selectedSupplier === idx && (
+                              <Badge bg="success">
+                                <i className="bi bi-check-circle me-1"></i>
+                                Selected
+                              </Badge>
+                            )}
+                          </div>
                           <div className="mb-3">
                             <label className="text-muted small">Name</label>
                             <div className="form-control-plaintext fw-semibold">{supplier.name || 'Unknown'}</div>

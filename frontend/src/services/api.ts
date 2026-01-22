@@ -748,6 +748,102 @@ export const apiService = {
     return response.data;
   },
 
+  // ===== INSPECTION DATABASE =====
+  getInspections: async (): Promise<any[]> => {
+    const response = await api.get('/api/inspections');
+    return response.data;
+  },
+
+  getInspection: async (po_number: string): Promise<any> => {
+    const response = await api.get(`/api/inspections/${po_number}`);
+    return response.data;
+  },
+
+  checkInspectionStatus: async (po_number: string): Promise<{exists: boolean; status?: string; confirmed_at?: string}> => {
+    const response = await api.get(`/api/inspections/check/${po_number}`);
+    return response.data;
+  },
+
+  // ===== INSPECTION REPORTS =====
+  createInspectionReport: async (data: {
+    po_number: string;
+    inspection_date: string;
+    inspected_by: string;
+    items: Array<{
+      item_description: string;
+      quantity_ordered: number;
+      quantity_received: number;
+      unit: string;
+      unit_price: number;
+      condition: string;
+      remarks: string;
+    }>;
+    overall_remarks: string;
+    status: string;
+  }): Promise<any> => {
+    const response = await api.post('/api/inspection-reports', data);
+    return response.data;
+  },
+
+  getInspectionReports: async (): Promise<any[]> => {
+    const response = await api.get('/api/inspection-reports');
+    return response.data;
+  },
+
+  createInspected: async (data: {
+    po_number: string;
+    inspection_date: string;
+    inspected_by: string;
+    items: Array<{
+      item_description: string;
+      quantity_ordered: number;
+      quantity_received: number;
+      unit: string;
+      unit_price: number;
+      condition: string;
+      remarks: string;
+    }>;
+    overall_remarks: string;
+    status: string;
+  }): Promise<any> => {
+    const response = await api.post('/api/inspected', data);
+    return response.data;
+  },
+
+  getInspected: async (): Promise<any[]> => {
+    const response = await api.get('/api/inspected');
+    return response.data;
+  },
+
+  // ===== CUSTODIAN SLIPS =====
+  createCustodianSlip: async (data: {
+    slip_number: string;
+    date: string;
+    received_from: string;
+    received_by: string;
+    items: Array<{
+      item_description: string;
+      property_number?: string;
+      quantity: number;
+      unit: string;
+      unit_value: number;
+      total_value: number;
+      condition: string;
+      remarks: string;
+    }>;
+    remarks: string;
+    status: string;
+    inspection_report_id?: string;
+  }): Promise<any> => {
+    const response = await api.post('/api/custodian-slips', data);
+    return response.data;
+  },
+
+  getCustodianSlips: async (): Promise<any[]> => {
+    const response = await api.get('/api/custodian-slips');
+    return response.data;
+  },
+
 };
 
 export default api;

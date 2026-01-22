@@ -47,6 +47,7 @@ const Inspection: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  const [inspectedPOs, setInspectedPOs] = useState<Set<string>>(new Set());
   
   const [inspectionReport, setInspectionReport] = useState<InspectionReport>({
     po_number: '',
@@ -59,7 +60,18 @@ const Inspection: React.FC = () => {
 
   useEffect(() => {
     fetchOrders();
+    loadInspectedPOs();
   }, []);
+
+  const loadInspectedPOs = async () => {
+    try {
+      const inspected = await apiService.getInspected();
+      const inspectedSet = new Set(inspected.map((item: any) => item.po_number));
+      setInspectedPOs(inspectedSet);
+    } catch (error) {
+      console.error('Error loading inspected POs:', error);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -74,86 +86,78 @@ const Inspection: React.FC = () => {
     try {
       setLoading(true);
       
-      // Fetch purchase requests that are completed (from canvasser) - ready for inspection
-      const purchaseRequests = await apiService.getPurchaseRequests(false);
-      const readyForInspection = purchaseRequests.filter(pr => 
-        pr.status === 'Completed'
-      );
+      // Fetch inspections from the inspection database (confirmed purchase orders)
+      console.log('🔍 Fetching inspections from API...');
+      const inspections = await apiService.getInspections();
       
-      console.log('📋 Purchase requests ready for inspection:', readyForInspection);
+      console.log('📋 Inspections from database:', inspections);
+      console.log('📊 Number of inspections:', inspections?.length || 0);
       
-      // Convert to PurchaseOrder format with real supplier data
-      const convertedOrders: PurchaseOrder[] = readyForInspection.map((pr: PurchaseRequest) => {
-        // Get selected supplier from the suppliers array
-        let selectedSupplier = null;
-        if (pr.suppliers && pr.suppliers.length > 0) {
-          if (pr.selected_supplier_ids && pr.selected_supplier_ids.length > 0) {
-            // Find supplier by matching supplier_id with selected_supplier_ids
-            selectedSupplier = pr.suppliers.find(s => 
-              pr.selected_supplier_ids?.includes(s.supplier_id || '')
-            );
-          }
-          // If no match or no selected_supplier_ids, use first supplier
-          if (!selectedSupplier) {
-            selectedSupplier = pr.suppliers[0];
-          }
+      if (!inspections || inspections.length === 0) {
+        console.log('⚠️ No inspections found in database');
+        setOrders([]);
+        return;
+      }
+      
+      // Convert to PurchaseOrder format
+      const convertedOrders: PurchaseOrder[] = inspections.map((inspection: any) => {
+        // Handle missing or invalid data
+        if (!inspection.items || !Array.isArray(inspection.items)) {
+          console.warn('⚠️ Inspection missing items array:', inspection);
+          inspection.items = [];
         }
         
-        // Build supplier object with real data
-        const supplierData = selectedSupplier || {
-          name: pr.entity_name || pr.requested_by || 'N/A',
-          address: '',
-          contact_person: '',
-          phone: '',
-          email: ''
-        };
-        
         return {
-          id: parseInt(pr.id) || hashString(pr.id),
-          po_number: pr.pr_number || pr.id,
-          supplier_id: selectedSupplier?.supplier_id ? hashString(selectedSupplier.supplier_id) : 0,
+          id: parseInt(inspection.id) || hashString(inspection.id || inspection.po_number),
+          po_number: inspection.po_number || inspection.pr_number || 'N/A',
+          supplier_id: inspection.supplier_id ? hashString(inspection.supplier_id) : 0,
           supplier: {
-            id: selectedSupplier?.supplier_id ? hashString(selectedSupplier.supplier_id) : 0,
-            name: selectedSupplier?.name || supplierData.name || 'N/A',
-            address: selectedSupplier?.address || supplierData.address || '',
+            id: inspection.supplier_id ? hashString(inspection.supplier_id) : 0,
+            name: inspection.supplier_name || 'N/A',
+            address: inspection.supplier_address || '',
             province: '',
-            contact_person: selectedSupplier?.contact_person || supplierData.contact_person || '',
-            phone: selectedSupplier?.phone || supplierData.phone || '',
-            email: selectedSupplier?.email || supplierData.email || '',
-            bir_tin: '',
+            contact_person: inspection.supplier_contact || '',
+            phone: inspection.supplier_phone || '',
+            email: '',
+            bir_tin: inspection.supplier_bir_tin || '',
             is_active: true,
-            created_at: pr.date_created,
-            updated_at: pr.date_updated || pr.date_created
+            created_at: inspection.date_created || new Date().toISOString(),
+            updated_at: inspection.date_updated || inspection.date_created || new Date().toISOString()
           },
-          delivery_address: pr.office_section || '',
-          notes: pr.remark || '',
+          delivery_address: inspection.delivery_address || '',
+          notes: inspection.notes || '',
           status: 'Completed' as const,
-          total_amount: pr.total_amount,
-          date_created: pr.date_created,
-          date_updated: pr.date_updated || pr.date_created,
-          items: pr.items.map((item, index) => ({
+          total_amount: inspection.total_amount || 0,
+          date_created: inspection.date_created || new Date().toISOString(),
+          date_updated: inspection.date_updated || inspection.date_created || new Date().toISOString(),
+          items: inspection.items.map((item: any, index: number) => ({
             id: index + 1,
             product_id: index + 1,
             product: {
               id: index + 1,
-              name: item.item_description,
-              unit: item.unit,
-              unit_price: item.unit_cost,
+              name: item.item_description || 'Unknown Item',
+              unit: item.unit || 'pcs',
+              unit_price: item.unit_cost || 0,
               category: '',
               is_active: true,
               description: ''
             },
-            quantity: item.quantity,
-            unit_price: item.unit_cost,
-            total_price: item.total_cost
+            quantity: item.quantity || 0,
+            unit_price: item.unit_cost || 0,
+            total_price: item.total_cost || 0
           }))
         };
       });
       
       console.log('✅ Converted orders for inspection:', convertedOrders);
+      console.log('📊 Number of converted orders:', convertedOrders.length);
       setOrders(convertedOrders);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
+    } catch (error: any) {
+      console.error('❌ Error fetching inspections:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      setToastMessage(error.response?.data?.detail || error.message || 'Failed to fetch inspections. Please try again.');
+      setToastType('error');
+      setShowToast(true);
       setOrders([]);
     } finally {
       setLoading(false);
@@ -201,16 +205,52 @@ const Inspection: React.FC = () => {
     if (!selectedOrder) return;
 
     try {
-      // TODO: Submit inspection report to backend API
-      // await apiService.createInspectionReport(inspectionReport);
+      // Submit inspection report to backend API
+      const reportData = {
+        po_number: inspectionReport.po_number,
+        inspection_date: inspectionReport.inspection_date,
+        inspected_by: inspectionReport.inspected_by,
+        items: inspectionReport.items.map(item => ({
+          item_description: item.item_description,
+          quantity_ordered: item.quantity_ordered,
+          quantity_received: item.quantity_received,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          condition: item.condition,
+          remarks: item.remarks || ''
+        })),
+        overall_remarks: inspectionReport.overall_remarks || '',
+        status: inspectionReport.status
+      };
+
+      // Create inspection report
+      const createdReport = await apiService.createInspectionReport(reportData);
       
-      setToastMessage('Inspection and Acceptance Report created successfully');
+      // Save to Inspected collection
+      await apiService.createInspected(reportData);
+      
+      // Mark as inspected
+      setInspectedPOs(prev => {
+        const newSet = new Set(prev);
+        newSet.add(inspectionReport.po_number);
+        return newSet;
+      });
+      
+      let message = 'Inspection and Acceptance Report created successfully and saved to Inspected collection';
+      
+      // If status is "Accepted", custodian slip is automatically created by backend
+      if (inspectionReport.status === 'Accepted') {
+        message += '. Inventory Custodian Slip has been automatically created.';
+      }
+      
+      setToastMessage(message);
       setToastType('success');
       setShowToast(true);
       setShowModal(false);
       
       // Refresh orders list
       await fetchOrders();
+      await loadInspectedPOs();
     } catch (error: any) {
       console.error('Error submitting inspection:', error);
       setToastMessage(error.response?.data?.message || 'Failed to create inspection report');
@@ -491,9 +531,13 @@ const Inspection: React.FC = () => {
           <Button variant="secondary" onClick={() => setShowModal(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSubmitInspection}>
+          <Button 
+            variant="primary" 
+            onClick={handleSubmitInspection}
+            disabled={inspectedPOs.has(inspectionReport.po_number)}
+          >
             <i className="bi bi-check-circle me-2"></i>
-            Submit Inspection Report
+            {inspectedPOs.has(inspectionReport.po_number) ? 'Already Inspected' : 'Submit Inspection Report'}
           </Button>
         </Modal.Footer>
       </Modal>

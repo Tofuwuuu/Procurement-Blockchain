@@ -83,6 +83,86 @@ class UpdatePurchaseRequest(BaseModel):
     selected_supplier_ids: Optional[List[str]] = None
     canvass_submitted_at: Optional[str] = None
 
+# Inspection Item model
+class InspectionItem(BaseModel):
+    item_description: str
+    quantity_ordered: int
+    quantity_received: int
+    unit: str
+    unit_price: float
+    condition: str  # 'Good' | 'Defective' | 'Damaged'
+    remarks: Optional[str] = ""
+
+# Inspection Report model (for creating)
+class CreateInspectionReport(BaseModel):
+    po_number: str
+    inspection_date: str
+    inspected_by: str
+    items: List[InspectionItem]
+    overall_remarks: Optional[str] = ""
+    status: str  # 'Accepted' | 'Partial' | 'Rejected'
+
+# Inspection Report model (for response)
+class InspectionReportResponse(BaseModel):
+    id: str
+    po_number: str
+    inspection_date: str
+    inspected_by: str
+    items: List[InspectionItem]
+    overall_remarks: str
+    status: str
+    date_created: str
+    date_updated: Optional[str] = None
+
+# Custodian Slip Item model
+class CustodianSlipItem(BaseModel):
+    item_description: str
+    property_number: Optional[str] = None
+    quantity: int
+    unit: str
+    unit_value: float
+    total_value: float
+    condition: str
+    remarks: Optional[str] = ""
+
+# Custodian Slip model (for creating)
+class CreateCustodianSlip(BaseModel):
+    slip_number: str
+    date: str
+    received_from: str
+    received_by: str
+    items: List[CustodianSlipItem]
+    remarks: Optional[str] = ""
+    status: str = "Submitted"
+    inspection_report_id: Optional[str] = None  # Link to inspection report
+
+# Custodian Slip model (for response)
+class CustodianSlipResponse(BaseModel):
+    id: str
+    slip_number: str
+    date: str
+    received_from: str
+    received_by: str
+    items: List[CustodianSlipItem]
+    remarks: str
+    status: str
+    inspection_report_id: Optional[str] = None
+    date_created: str
+    date_updated: Optional[str] = None
+
+# Pending Inspection model (for orders waiting to be inspected)
+class PendingInspection(BaseModel):
+    id: str
+    po_number: str
+    pr_number: str
+    supplier_name: str
+    supplier_id: Optional[str] = None
+    date_created: str
+    date_updated: Optional[str] = None
+    total_amount: float
+    items: List[PurchaseRequestItem]
+    status: str = "Pending Inspection"
+
 # Purchase Request model (for response)
 class PurchaseRequestResponse(BaseModel):
     id: str
@@ -104,3 +184,83 @@ class PurchaseRequestResponse(BaseModel):
     suppliers: Optional[List[CanvassSupplier]] = None
     selected_supplier_ids: Optional[List[str]] = None
     canvass_submitted_at: Optional[str] = None
+
+# Inspection Item model
+class InspectionItem(BaseModel):
+    item_description: str
+    quantity_ordered: int
+    quantity_received: int
+    unit: str
+    unit_price: float
+    condition: str  # 'Good' | 'Defective' | 'Damaged'
+    remarks: Optional[str] = ""
+
+# Inspection Report model (for creating)
+class CreateInspectionReport(BaseModel):
+    po_number: str
+    inspection_date: str
+    inspected_by: str
+    items: List[InspectionItem]
+    overall_remarks: Optional[str] = ""
+    status: str  # 'Accepted' | 'Partial' | 'Rejected'
+
+# Inspection Report model (for response)
+class InspectionReportResponse(BaseModel):
+    id: str
+    po_number: str
+    inspection_date: str
+    inspected_by: str
+    items: List[InspectionItem]
+    overall_remarks: str
+    status: str
+    date_created: str
+    date_updated: Optional[str] = None
+
+# Custodian Slip Item model
+class CustodianSlipItem(BaseModel):
+    item_description: str
+    property_number: Optional[str] = None
+    quantity: int
+    unit: str
+    unit_value: float
+    total_value: float
+    condition: str
+    remarks: Optional[str] = ""
+
+# Custodian Slip model (for creating)
+class CreateCustodianSlip(BaseModel):
+    slip_number: str
+    date: str
+    received_from: str
+    received_by: str
+    items: List[CustodianSlipItem]
+    remarks: Optional[str] = ""
+    status: str = "Submitted"
+    inspection_report_id: Optional[str] = None  # Link to inspection report
+
+# Custodian Slip model (for response)
+class CustodianSlipResponse(BaseModel):
+    id: str
+    slip_number: str
+    date: str
+    received_from: str
+    received_by: str
+    items: List[CustodianSlipItem]
+    remarks: str
+    status: str
+    inspection_report_id: Optional[str] = None
+    date_created: str
+    date_updated: Optional[str] = None
+
+# Pending Inspection model (for orders waiting to be inspected)
+class PendingInspection(BaseModel):
+    id: str
+    po_number: str
+    pr_number: str
+    supplier_name: str
+    supplier_id: Optional[str] = None
+    date_created: str
+    date_updated: Optional[str] = None
+    total_amount: float
+    items: List[PurchaseRequestItem]
+    status: str = "Pending Inspection"

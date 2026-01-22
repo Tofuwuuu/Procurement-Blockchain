@@ -19,6 +19,7 @@ const OrderDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -235,7 +236,7 @@ const OrderDetail: React.FC = () => {
 
   // Canvasser confirm (marks PR as Completed again to persist any change and acknowledge)
   const handleConfirm = async () => {
-    if (!order || !(user?.role === 'canvasser' || user?.role === 'employee')) return;
+    if (!order || !(user?.role === 'canvasser' || user?.role === 'employee') || isConfirmed) return;
     try {
       setConfirming(true);
       setShowSubmitConfirmModal(false);
@@ -243,9 +244,18 @@ const OrderDetail: React.FC = () => {
         await apiService.updatePurchaseRequest(order.po_number, {
           status: 'Completed'
         } as any);
-        setToastMessage('Purchase order confirmed.');
+        
+        // Mark as confirmed and disable button
+        setIsConfirmed(true);
+        
+        setToastMessage('Purchase order confirmed and saved to inspection database.');
         setToastType('success');
         setShowToast(true);
+        
+        // Navigate back to orders after 2 seconds
+        setTimeout(() => {
+          navigate('/orders');
+        }, 2000);
       } catch (err) {
         console.error('Failed to confirm order:', err);
         setToastMessage('Failed to confirm order. Please try again.');
@@ -369,9 +379,9 @@ const OrderDetail: React.FC = () => {
                 <Button
                   variant="primary"
                   onClick={() => setShowSubmitConfirmModal(true)}
-                  disabled={confirming}
+                  disabled={confirming || isConfirmed}
                 >
-                  {confirming ? 'Confirming...' : 'Confirm'}
+                  {confirming ? 'Confirming...' : isConfirmed ? 'Confirmed' : 'Confirm'}
                 </Button>
               )}
             </div>
@@ -382,7 +392,7 @@ const OrderDetail: React.FC = () => {
       {/* Order Summary */}
       <Row className="mb-4">
         <Col md={8}>
-          <Card>
+          <Card className={isConfirmed ? 'opacity-75' : ''}>
             <Card.Header>
               <h5 className="mb-0">Order Summary</h5>
             </Card.Header>
@@ -405,7 +415,7 @@ const OrderDetail: React.FC = () => {
           </Card>
         </Col>
         <Col md={4}>
-          <Card>
+          <Card className={isConfirmed ? 'opacity-75' : ''}>
             <Card.Header>
               <h5 className="mb-0">Supplier Information</h5>
             </Card.Header>
@@ -423,10 +433,36 @@ const OrderDetail: React.FC = () => {
         </Col>
       </Row>
 
+      {/* Actions Section - appears after confirmation */}
+      {isConfirmed && (
+        <Row className="mb-4">
+          <Col>
+            <Card className="border-success bg-light">
+              <Card.Header className="bg-success">
+                <h5 className="mb-0 text-white">Actions</h5>
+              </Card.Header>
+              <Card.Body>
+                <div className="text-center py-3">
+                  <Button 
+                    variant="primary" 
+                    size="sm" 
+                    disabled
+                    className="d-inline-flex align-items-center gap-2"
+                  >
+                    <i className="bi bi-check-circle"></i>
+                    Order Confirmed
+                  </Button>
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
+
       {/* Delivery Information */}
       <Row className="mb-4">
         <Col>
-          <Card>
+          <Card className={isConfirmed ? 'opacity-75' : ''}>
             <Card.Header>
               <h5 className="mb-0">Delivery Information</h5>
             </Card.Header>
@@ -440,7 +476,7 @@ const OrderDetail: React.FC = () => {
       {/* Items List */}
       <Row className="mb-4">
         <Col>
-          <Card>
+          <Card className={isConfirmed ? 'opacity-75' : ''}>
             <Card.Header>
               <h5 className="mb-0">Order Items</h5>
             </Card.Header>
@@ -520,14 +556,27 @@ const OrderDetail: React.FC = () => {
           <Modal.Title>Confirm Purchase Order</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p>Confirm this purchase order is ready and matches the completed canvass.</p>
-          <p><strong>PO Number:</strong> {order.po_number}</p>
-          <p><strong>Total Amount:</strong> {formatCurrency(order.total_amount)}</p>
+          {isConfirmed ? (
+            <div className="alert alert-info">
+              <i className="bi bi-info-circle me-2"></i>
+              This purchase order has already been confirmed and saved to the inspection database. 
+              It is now available for the inspector to review.
+            </div>
+          ) : (
+            <>
+              <p>Confirm this purchase order is ready and matches the completed canvass.</p>
+              <p><strong>PO Number:</strong> {order.po_number}</p>
+              <p><strong>Total Amount:</strong> {formatCurrency(order.total_amount)}</p>
+              <p className="text-muted mt-3">
+                <small>Once confirmed, this order will be saved to the inspection database and made available to the inspector.</small>
+              </p>
+            </>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowSubmitConfirmModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleConfirm} disabled={confirming}>
-            {confirming ? 'Confirming...' : 'Confirm'}
+          <Button variant="primary" onClick={handleConfirm} disabled={confirming || isConfirmed}>
+            {confirming ? 'Confirming...' : isConfirmed ? 'Already Confirmed' : 'Confirm'}
           </Button>
         </Modal.Footer>
       </Modal>

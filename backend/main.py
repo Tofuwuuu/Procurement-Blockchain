@@ -8,7 +8,11 @@ import os
 
 # Import local modules
 from database import connect_to_mongo, close_mongo_connection, get_database
-from models import LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse, UpdatePurchaseRequest
+from models import (
+    LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse, UpdatePurchaseRequest,
+    CreateInspectionReport, InspectionReportResponse, CreateCustodianSlip, CustodianSlipResponse,
+    PendingInspection
+)
 from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
 from typing import List
@@ -615,6 +619,61 @@ async def update_purchase_request(
             if not existing_ref and "ref_number" not in update_doc:
                 update_doc["ref_number"] = await generate_cc_reference_number()
         
+        # If status is "Completed", save to pending_inspections database for inspector
+        if new_status and str(new_status).lower() == "completed":
+            pending_inspections_collection = db.pending_inspections
+            
+            # Get supplier information
+            supplier_name = pr.get("entity_name", "N/A")
+            supplier_id = None
+            supplier_address = ""
+            supplier_contact = ""
+            supplier_phone = ""
+            supplier_bir_tin = ""
+            
+            if pr.get("suppliers") and pr.get("selected_supplier_ids"):
+                selected_supplier = next(
+                    (s for s in pr.get("suppliers", []) 
+                     if s.get("supplier_id") in pr.get("selected_supplier_ids", [])),
+                    None
+                )
+                if selected_supplier:
+                    supplier_name = selected_supplier.get("name", supplier_name)
+                    supplier_id = selected_supplier.get("supplier_id")
+                    supplier_address = selected_supplier.get("address", "")
+                    supplier_contact = selected_supplier.get("contact_person", "")
+                    supplier_phone = selected_supplier.get("phone", "")
+            
+            # Check if pending inspection record already exists
+            existing_inspection = await pending_inspections_collection.find_one({"po_number": pr.get("pr_number")})
+            if not existing_inspection:
+                # Create pending inspection document with all purchase order details
+                pending_inspection_doc = {
+                    "po_number": pr.get("pr_number"),
+                    "pr_number": pr.get("pr_number"),
+                    "ref_number": pr.get("ref_number"),
+                    "supplier_name": supplier_name,
+                    "supplier_id": supplier_id,
+                    "supplier_address": supplier_address,
+                    "supplier_contact": supplier_contact,
+                    "supplier_phone": supplier_phone,
+                    "supplier_bir_tin": supplier_bir_tin,
+                    "delivery_address": pr.get("office_section", ""),
+                    "total_amount": pr.get("total_amount", 0),
+                    "items_count": len(pr.get("items", [])),
+                    "items": pr.get("items", []),
+                    "notes": pr.get("remark", ""),
+                    "requested_by": pr.get("requested_by", ""),
+                    "date_created": pr.get("date_created"),
+                    "date_updated": datetime.now(timezone.utc).isoformat(),
+                    "status": "Pending Inspection",
+                    "confirmed_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Insert into pending_inspections database
+                await pending_inspections_collection.insert_one(pending_inspection_doc)
+                print(f"✅ Saved confirmed purchase order {pr.get('pr_number')} to pending_inspections database")
+        
         # Always update date_updated timestamp
         update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
         
@@ -639,17 +698,73 @@ async def update_purchase_request(
                 detail="Failed to retrieve updated purchase request"
             )
         
+        # Ensure all required fields are present for PurchaseRequestResponse
         updated_pr["id"] = str(updated_pr["_id"])
-        print(f"✅ Purchase request updated successfully: {updated_pr.get('pr_number')} - Status: {updated_pr.get('status')}")
-        return PurchaseRequestResponse(**updated_pr)
         
-    except HTTPException:
-        raise
+        # Required fields - use updated values if available, otherwise fall back to original
+        if "pr_number" not in updated_pr:
+            updated_pr["pr_number"] = pr.get("pr_number", "")
+        if "entity_name" not in updated_pr:
+            updated_pr["entity_name"] = pr.get("entity_name", "")
+        if "office_section" not in updated_pr:
+            updated_pr["office_section"] = pr.get("office_section", "")
+        if "date" not in updated_pr:
+            updated_pr["date"] = pr.get("date", "")
+        if "status" not in updated_pr:
+            updated_pr["status"] = pr.get("status", "Pending")
+        if "requested_by" not in updated_pr:
+            updated_pr["requested_by"] = pr.get("requested_by", "")
+        if "items" not in updated_pr or not updated_pr.get("items"):
+            updated_pr["items"] = pr.get("items", [])
+        # Ensure items is a list (not None)
+        if not isinstance(updated_pr.get("items"), list):
+            updated_pr["items"] = []
+        if "total_amount" not in updated_pr:
+            updated_pr["total_amount"] = pr.get("total_amount", 0)
+        if "date_created" not in updated_pr:
+            updated_pr["date_created"] = pr.get("date_created", datetime.now(timezone.utc).isoformat())
+        
+        # Optional fields with defaults
+        updated_pr.setdefault("ref_number", None)
+        updated_pr.setdefault("fund_cluster", "")
+        updated_pr.setdefault("responsibility_center_code", "")
+        updated_pr.setdefault("remark", "")
+        updated_pr.setdefault("requested_by_id", None)
+        updated_pr.setdefault("date_updated", datetime.now(timezone.utc).isoformat())
+        updated_pr.setdefault("suppliers", None)
+        updated_pr.setdefault("selected_supplier_ids", None)
+        updated_pr.setdefault("canvass_submitted_at", None)
+        
+        print(f"✅ Purchase request updated successfully: {updated_pr.get('pr_number')} - Status: {updated_pr.get('status')}")
+        print(f"📋 Document keys: {list(updated_pr.keys())}")
+        print(f"📦 Items count: {len(updated_pr.get('items', []))}")
+        
+        try:
+            response = PurchaseRequestResponse(**updated_pr)
+            return response
+        except Exception as validation_error:
+            print(f"❌ Validation error creating PurchaseRequestResponse: {str(validation_error)}")
+            print(f"Error type: {type(validation_error).__name__}")
+            print(f"Document keys: {list(updated_pr.keys())}")
+            print(f"Document sample: {str(updated_pr)[:500]}")
+            # Try to identify which field is causing the issue
+            if hasattr(validation_error, 'errors'):
+                print(f"Validation errors: {validation_error.errors()}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Validation error: {str(validation_error)}"
+            )
+        
+    except HTTPException as he:
+        print(f"❌ HTTPException in update_purchase_request: {he.status_code} - {he.detail}")
+        raise he
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
         print(f"❌ Update purchase request error: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
         print(f"Traceback: {error_trace}")
+        # Raise HTTPException to maintain response_model consistency
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
@@ -682,6 +797,490 @@ async def test_purchase_requests_endpoint():
 @app.get("/api/test")
 async def test_endpoint():
     return {"message": "API is working correctly"}
+
+# ===== PENDING INSPECTIONS DATABASE =====
+
+# Get all pending inspections (for inspector)
+@app.get("/api/inspections")
+async def get_inspections(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Fetch all pending inspections from pending_inspections collection"""
+    try:
+        # Verify authentication
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Invalid or expired token"}
+            )
+        
+        # Get database connection
+        db = await get_database()
+        pending_inspections_collection = db.pending_inspections
+        
+        # Fetch all documents from pending_inspections collection
+        print(f"🔍 Fetching from pending_inspections collection...")
+        cursor = pending_inspections_collection.find({}).sort("date_created", -1)
+        inspections = await cursor.to_list(length=None)
+        
+        print(f"📊 Found {len(inspections)} documents in pending_inspections")
+        
+        # Convert MongoDB documents to JSON-serializable format
+        result = []
+        for doc in inspections:
+            # Create a new dict to avoid modifying the original
+            doc_dict = dict(doc)
+            # Convert ObjectId to string
+            doc_dict["id"] = str(doc_dict.get("_id", ""))
+            # Remove _id to avoid serialization issues
+            doc_dict.pop("_id", None)
+            result.append(doc_dict)
+        
+        print(f"✅ Returning {len(result)} pending inspections")
+        return JSONResponse(content=result, status_code=status.HTTP_200_OK)
+        
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error fetching pending inspections: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": f"An error occurred: {str(e)}"}
+        )
+
+# Get single inspection by PO number
+@app.get("/api/inspections/{po_number}")
+async def get_inspection(
+    po_number: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        inspection_collection = db.pending_inspections
+        
+        inspection = await inspection_collection.find_one({"po_number": po_number})
+        
+        if not inspection:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Inspection not found"
+            )
+        
+        inspection["id"] = str(inspection["_id"])
+        return inspection
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Check if purchase order is already confirmed (in pending_inspections database)
+@app.get("/api/inspections/check/{po_number}")
+async def check_inspection_status(
+    po_number: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Check if a purchase order exists in pending_inspections collection"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        pending_inspections_collection = db.pending_inspections
+        
+        inspection = await pending_inspections_collection.find_one({"po_number": po_number})
+        
+        return {
+            "exists": inspection is not None,
+            "status": inspection.get("status") if inspection else None,
+            "confirmed_at": inspection.get("confirmed_at") if inspection else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# ===== INSPECTION REPORTS =====
+
+# Create Inspection Report endpoint
+@app.post("/api/inspection-reports", response_model=InspectionReportResponse)
+async def create_inspection_report(
+    report: CreateInspectionReport,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        inspection_reports_collection = db.inspection_reports
+        custodian_slips_collection = db.custodian_slips
+        
+        # Generate inspection report ID
+        counter = await db.counters.find_one_and_update(
+            {"_id": "inspection_report_id"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        report_id = str(counter.get("seq", 1)) if counter else "1"
+        
+        # Create inspection report document
+        report_doc = {
+            "po_number": report.po_number,
+            "inspection_date": report.inspection_date,
+            "inspected_by": report.inspected_by,
+            "items": [item.dict() for item in report.items],
+            "overall_remarks": report.overall_remarks or "",
+            "status": report.status,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": None
+        }
+        
+        # Insert inspection report
+        result = await inspection_reports_collection.insert_one(report_doc)
+        inspection_report_id = str(result.inserted_id)
+        report_doc["id"] = inspection_report_id
+        
+        # Update pending_inspections database - mark as inspected
+        pending_inspections_collection = db.pending_inspections
+        await pending_inspections_collection.update_one(
+            {"po_number": report.po_number},
+            {"$set": {
+                "status": f"Inspected - {report.status}",
+                "inspection_report_id": inspection_report_id,
+                "inspected_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        print(f"✅ Updated inspection status for {report.po_number} in pending_inspections database")
+        
+        # If status is "Accepted", automatically create custodian slip
+        if report.status.lower() == "accepted":
+            # Generate slip number
+            slip_counter = await db.counters.find_one_and_update(
+                {"_id": "custodian_slip_id"},
+                {"$inc": {"seq": 1}},
+                upsert=True,
+                return_document=True
+            )
+            slip_seq = slip_counter.get("seq", 1) if slip_counter else 1
+            slip_number = f"ICS-{datetime.now().strftime('%Y%m%d')}-{str(slip_seq).zfill(4)}"
+            
+            # Convert inspection items to custodian slip items (only accepted items)
+            slip_items = []
+            for item in report.items:
+                if item.condition.lower() == "good" and item.quantity_received > 0:
+                    slip_items.append({
+                        "item_description": item.item_description,
+                        "property_number": None,
+                        "quantity": item.quantity_received,
+                        "unit": item.unit,
+                        "unit_value": item.unit_price,
+                        "total_value": item.unit_price * item.quantity_received,
+                        "condition": item.condition,
+                        "remarks": item.remarks or ""
+                    })
+            
+            # Only create slip if there are accepted items
+            if slip_items:
+                # Get supplier info from purchase request
+                purchase_requests_collection = db.purchase_requests
+                pr = await purchase_requests_collection.find_one({"pr_number": report.po_number})
+                received_from = "N/A"
+                if pr:
+                    # Try to get supplier name from selected suppliers
+                    if pr.get("suppliers") and pr.get("selected_supplier_ids"):
+                        selected_supplier = next(
+                            (s for s in pr.get("suppliers", []) 
+                             if s.get("supplier_id") in pr.get("selected_supplier_ids", [])),
+                            None
+                        )
+                        if selected_supplier:
+                            received_from = selected_supplier.get("name", pr.get("entity_name", "N/A"))
+                        else:
+                            received_from = pr.get("entity_name", "N/A")
+                    else:
+                        received_from = pr.get("entity_name", "N/A")
+                
+                # Create custodian slip document
+                slip_doc = {
+                    "slip_number": slip_number,
+                    "date": report.inspection_date,
+                    "received_from": received_from,
+                    "received_by": report.inspected_by,
+                    "items": slip_items,
+                    "remarks": f"Auto-generated from Inspection Report {inspection_report_id}. {report.overall_remarks or ''}",
+                    "status": "Submitted",
+                    "inspection_report_id": inspection_report_id,
+                    "date_created": datetime.now(timezone.utc).isoformat(),
+                    "date_updated": None
+                }
+                
+                # Insert custodian slip
+                slip_result = await custodian_slips_collection.insert_one(slip_doc)
+                print(f"✅ Auto-created custodian slip {slip_number} from inspection report {inspection_report_id}")
+        
+        return InspectionReportResponse(**report_doc)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Create inspection report error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Get all Inspection Reports endpoint
+@app.get("/api/inspection-reports", response_model=List[InspectionReportResponse])
+async def get_inspection_reports(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        inspection_reports_collection = db.inspection_reports
+        
+        cursor = inspection_reports_collection.find({}).sort("date_created", -1)
+        reports = await cursor.to_list(length=None)
+        
+        result = []
+        for report in reports:
+            report["id"] = str(report["_id"])
+            result.append(InspectionReportResponse(**report))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# ===== INSPECTED COLLECTION =====
+
+# Create Inspected Record endpoint
+@app.post("/api/inspected", response_model=dict)
+async def create_inspected(
+    report: CreateInspectionReport,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        inspected_collection = db.inspected
+        
+        # Create inspected document
+        inspected_doc = {
+            "po_number": report.po_number,
+            "inspection_date": report.inspection_date,
+            "inspected_by": report.inspected_by,
+            "items": [item.dict() for item in report.items],
+            "overall_remarks": report.overall_remarks or "",
+            "status": report.status,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": None
+        }
+        
+        # Insert or update inspected record
+        result = await inspected_collection.update_one(
+            {"po_number": report.po_number},
+            {"$set": inspected_doc},
+            upsert=True
+        )
+        
+        return {
+            "ok": True,
+            "message": f"Record saved to Inspected collection for {report.po_number}",
+            "po_number": report.po_number
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Get Inspected Records endpoint
+@app.get("/api/inspected", response_model=List[dict])
+async def get_inspected(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        inspected_collection = db.inspected
+        
+        cursor = inspected_collection.find({}).sort("date_created", -1)
+        records = await cursor.to_list(length=None)
+        
+        result = []
+        for record in records:
+            # Convert BSON ObjectId to string for serialization
+            record["id"] = str(record.pop("_id", ""))
+            result.append(record)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# ===== CUSTODIAN SLIPS =====
+
+# Create Custodian Slip endpoint
+@app.post("/api/custodian-slips", response_model=CustodianSlipResponse)
+async def create_custodian_slip(
+    slip: CreateCustodianSlip,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        custodian_slips_collection = db.custodian_slips
+        
+        # Create custodian slip document
+        slip_doc = {
+            "slip_number": slip.slip_number,
+            "date": slip.date,
+            "received_from": slip.received_from,
+            "received_by": slip.received_by,
+            "items": [item.dict() for item in slip.items],
+            "remarks": slip.remarks or "",
+            "status": slip.status,
+            "inspection_report_id": slip.inspection_report_id,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": None
+        }
+        
+        # Insert custodian slip
+        result = await custodian_slips_collection.insert_one(slip_doc)
+        slip_doc["id"] = str(result.inserted_id)
+        
+        return CustodianSlipResponse(**slip_doc)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Create custodian slip error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
+
+# Get all Custodian Slips endpoint
+@app.get("/api/custodian-slips", response_model=List[CustodianSlipResponse])
+async def get_custodian_slips(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        custodian_slips_collection = db.custodian_slips
+        
+        cursor = custodian_slips_collection.find({}).sort("date_created", -1)
+        slips = await cursor.to_list(length=None)
+        
+        result = []
+        for slip in slips:
+            slip["id"] = str(slip["_id"])
+            result.append(CustodianSlipResponse(**slip))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
