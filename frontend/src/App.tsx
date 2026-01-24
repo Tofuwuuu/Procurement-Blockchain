@@ -20,6 +20,7 @@ import AuditLogs from './pages/AuditLogs';
 import Inspection from './pages/Inspection';
 import InventoryCustodianSlip from './pages/InventoryCustodianSlip';
 import PropertyAcknowledgementReceipt from './pages/PropertyAcknowledgementReceipt';
+import InventoryTransferReport from './pages/InventoryTransferReport';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
@@ -346,6 +347,17 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PropertyAcknowledgementReceipt />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/inventory-transfer-report"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <InventoryTransferReport />
               </Layout>
             </ProtectedRoute>
           }

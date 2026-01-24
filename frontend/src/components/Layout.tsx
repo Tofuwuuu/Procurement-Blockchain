@@ -103,6 +103,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                       <i className="bi bi-receipt me-2"></i>
                       Property Acknowledgement Receipt
                     </Nav.Link>
+                    
+                    <Nav.Link 
+                      as={Link} 
+                      to="/inventory-transfer-report" 
+                      active={isActive('/inventory-transfer-report')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-arrow-left-right me-2"></i>
+                      Inventory Transfer Report
+                    </Nav.Link>
                   </>
                 )}
                 
