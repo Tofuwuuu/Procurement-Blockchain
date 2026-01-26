@@ -1282,6 +1282,322 @@ async def get_custodian_slips(
             detail=f"An error occurred: {str(e)}"
         )
 
+# ===== INVENTORY TRANSFER REPORTS =====
+@app.post("/api/inventory-transfer-reports")
+async def create_inventory_transfer_report(
+    transfer_data: dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new inventory transfer report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.inventory_transfer_reports
+        
+        # Prepare document
+        doc = {
+            "itr_no": transfer_data.get("itr_no", ""),
+            "entity_name": transfer_data.get("entity_name", ""),
+            "fund_cluster": transfer_data.get("fund_cluster", ""),
+            "transfer_type": transfer_data.get("transfer_type", ""),
+            "transfer_type_others": transfer_data.get("transfer_type_others", ""),
+            "items": transfer_data.get("items", []),
+            "reason_for_transfer": transfer_data.get("reason_for_transfer", ""),
+            "approved_by": transfer_data.get("approved_by", ""),
+            "released_issued_by": transfer_data.get("released_issued_by", ""),
+            "received_by": transfer_data.get("received_by", ""),
+            "date": transfer_data.get("date", ""),
+            "status": transfer_data.get("status", "Draft"),
+            "created_by": payload.get("sub", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Insert document
+        result = await collection.insert_one(doc)
+        
+        return {
+            "id": str(result.inserted_id),
+            "itr_no": doc["itr_no"],
+            "message": "Inventory Transfer Report created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating transfer report: {str(e)}"
+        )
+
+@app.get("/api/inventory-transfer-reports")
+async def get_inventory_transfer_reports(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all inventory transfer reports"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.inventory_transfer_reports
+        
+        # Fetch all reports
+        cursor = collection.find({}).sort("created_at", -1)
+        reports = await cursor.to_list(length=None)
+        
+        # Convert ObjectId and datetime to string for JSON serialization
+        result = []
+        for report in reports:
+            try:
+                # Convert _id to string
+                if "_id" in report:
+                    report["id"] = str(report["_id"])
+                    del report["_id"]
+                
+                # Convert datetime strings (they should already be ISO format from creation)
+                # This ensures all fields are JSON serializable
+                result.append(report)
+            except Exception as e:
+                print(f"Error processing report: {str(e)}")
+                continue
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/inventory-transfer-reports: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching transfer reports: {str(e)}"
+        )
+
+@app.get("/api/inventory-transfer-reports/{itr_id}")
+async def get_inventory_transfer_report(
+    itr_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific inventory transfer report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        from bson import ObjectId
+        db = await get_database()
+        collection = db.inventory_transfer_reports
+        
+        # Fetch report
+        try:
+            report = await collection.find_one({"_id": ObjectId(itr_id)})
+        except:
+            report = None
+        
+        if not report:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Transfer report not found"
+            )
+        
+        # Convert ObjectId to string
+        if "_id" in report:
+            report["id"] = str(report["_id"])
+            del report["_id"]
+        
+        return report
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/inventory-transfer-reports/{{id}}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching transfer report: {str(e)}"
+        )
+
+# ===== PROPERTY TRANSFER REPORTS =====
+@app.post("/api/property-transfer-reports")
+async def create_property_transfer_report(
+    transfer_data: dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new property transfer report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.property_transfer_reports
+        
+        # Prepare document
+        doc = {
+            "itr_no": transfer_data.get("itr_no", ""),
+            "entity_name": transfer_data.get("entity_name", ""),
+            "fund_cluster": transfer_data.get("fund_cluster", ""),
+            "transfer_type": transfer_data.get("transfer_type", ""),
+            "transfer_type_others": transfer_data.get("transfer_type_others", ""),
+            "items": transfer_data.get("items", []),
+            "reason_for_transfer": transfer_data.get("reason_for_transfer", ""),
+            "approved_by": transfer_data.get("approved_by", ""),
+            "released_issued_by": transfer_data.get("released_issued_by", ""),
+            "received_by": transfer_data.get("received_by", ""),
+            "date": transfer_data.get("date", ""),
+            "status": transfer_data.get("status", "Draft"),
+            "created_by": payload.get("sub", ""),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Insert document
+        result = await collection.insert_one(doc)
+        
+        return {
+            "id": str(result.inserted_id),
+            "itr_no": doc["itr_no"],
+            "message": "Property Transfer Report created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating transfer report: {str(e)}"
+        )
+
+@app.get("/api/property-transfer-reports")
+async def get_property_transfer_reports(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all property transfer reports"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.property_transfer_reports
+        
+        # Fetch all reports
+        cursor = collection.find({}).sort("created_at", -1)
+        reports = await cursor.to_list(length=None)
+        
+        # Convert ObjectId and datetime to string for JSON serialization
+        result = []
+        for report in reports:
+            try:
+                # Convert _id to string
+                if "_id" in report:
+                    report["id"] = str(report["_id"])
+                    del report["_id"]
+                
+                # Convert datetime strings (they should already be ISO format from creation)
+                # This ensures all fields are JSON serializable
+                result.append(report)
+            except Exception as e:
+                print(f"Error processing report: {str(e)}")
+                continue
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/property-transfer-reports: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching transfer reports: {str(e)}"
+        )
+
+@app.get("/api/property-transfer-reports/{ptr_id}")
+async def get_property_transfer_report(
+    ptr_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific property transfer report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        from bson import ObjectId
+        db = await get_database()
+        collection = db.property_transfer_reports
+        
+        # Fetch report
+        try:
+            report = await collection.find_one({"_id": ObjectId(ptr_id)})
+        except:
+            report = None
+        
+        if not report:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Transfer report not found"
+            )
+        
+        # Convert ObjectId to string
+        if "_id" in report:
+            report["id"] = str(report["_id"])
+            del report["_id"]
+        
+        return report
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/property-transfer-reports/{{id}}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching transfer report: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3003)

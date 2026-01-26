@@ -3,7 +3,7 @@ import axios, { AxiosInstance, AxiosResponse, AxiosError, AxiosRequestConfig } f
 // API base configuration
 // Use proxy in development (package.json "proxy"), otherwise honor env var
 const isDev = process.env.NODE_ENV !== 'production';
-const API_BASE_URL = isDev ? 'http://localhost:3003' : (process.env.REACT_APP_API_URL || 'https://your-api.example.com');
+const API_BASE_URL = isDev ? '' : (process.env.REACT_APP_API_URL || 'https://your-api.example.com');
 
 // Create axios instance with default config
 const api: AxiosInstance = axios.create({
@@ -841,6 +841,38 @@ export const apiService = {
 
   getCustodianSlips: async (): Promise<any[]> => {
     const response = await api.get('/api/custodian-slips');
+    return response.data;
+  },
+
+  // ===== INVENTORY TRANSFER REPORTS =====
+  createInventoryTransferReport: async (data: any): Promise<any> => {
+    const response = await api.post('/api/inventory-transfer-reports', data);
+    return response.data;
+  },
+
+  getInventoryTransferReports: async (): Promise<any[]> => {
+    const response = await api.get('/api/inventory-transfer-reports');
+    return response.data;
+  },
+
+  getInventoryTransferReport: async (id: string): Promise<any> => {
+    const response = await api.get(`/api/inventory-transfer-reports/${id}`);
+    return response.data;
+  },
+
+  // ===== PROPERTY TRANSFER REPORTS =====
+  createPropertyTransferReport: async (data: any): Promise<any> => {
+    const response = await api.post('/api/property-transfer-reports', data);
+    return response.data;
+  },
+
+  getPropertyTransferReports: async (): Promise<any[]> => {
+    const response = await api.get('/api/property-transfer-reports');
+    return response.data;
+  },
+
+  getPropertyTransferReport: async (id: string): Promise<any> => {
+    const response = await api.get(`/api/property-transfer-reports/${id}`);
     return response.data;
   },
 

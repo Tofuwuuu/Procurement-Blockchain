@@ -3,6 +3,7 @@ import {
   Container, Row, Col, Card, Table, Button, Badge, 
   Form, Modal, InputGroup 
 } from 'react-bootstrap';
+import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
@@ -10,9 +11,12 @@ import Toast from '../components/Toast';
 interface PropertyItem {
   property_number: string;
   item_description: string;
+  quantity_ordered?: number;
+  quantity_received?: number;
   quantity: number;
   unit: string;
   unit_value: number;
+  unit_price?: number;
   total_value: number;
   condition: string;
   date_acquired: string;
@@ -21,6 +25,8 @@ interface PropertyItem {
 
 interface AcknowledgementReceipt {
   id?: string;
+  par_number: string;
+  po_number: string;
   receipt_number: string;
   date: string;
   acknowledged_by: string;
@@ -33,28 +39,67 @@ interface AcknowledgementReceipt {
 
 const PropertyAcknowledgementReceipt: React.FC = () => {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<AcknowledgementReceipt[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
-  const [currentReceipt, setCurrentReceipt] = useState<AcknowledgementReceipt>({
-    receipt_number: '',
-    date: new Date().toISOString().split('T')[0],
-    acknowledged_by: '',
-    received_by: user?.full_name || user?.username || '',
-    position: '',
-    items: [],
-    remarks: '',
-    status: 'Draft'
-  });
+  const [selectedReceipt, setSelectedReceipt] = useState<AcknowledgementReceipt | null>(null);
 
   useEffect(() => {
-    // TODO: Fetch acknowledgement receipts from API
-    // fetchReceipts();
+    fetchInspected();
   }, []);
+
+  const fetchInspected = async () => {
+    try {
+      setLoading(true);
+      const inspected = await apiService.getInspected();
+      
+      // Convert inspected records to acknowledgement receipt format
+      const receiptsData: AcknowledgementReceipt[] = inspected.map((item: any, index: number) => ({
+        id: item.id || item._id,
+        par_number: `PAR-${new Date().getFullYear()}-${String(index + 1).padStart(4, '0')}`,
+        po_number: item.po_number || 'N/A',
+        receipt_number: `PAR-${new Date().getFullYear()}-${String(index + 1).padStart(4, '0')}`,
+        date: item.inspection_date || new Date().toISOString().split('T')[0],
+        acknowledged_by: item.inspected_by || 'N/A',
+        received_by: user?.full_name || item.inspected_by || 'N/A',
+        position: user?.role || 'Custodian',
+        items: item.items.map((itemData: any) => ({
+          property_number: `2024-${String(index + 1).padStart(3, '0')}-001`,
+          item_description: itemData.item_description,
+          quantity_ordered: itemData.quantity_ordered || 1,
+          quantity_received: itemData.quantity_received || 1,
+          quantity: itemData.quantity_received || itemData.quantity_ordered || 1,
+          unit: itemData.unit || 'pcs',
+          unit_value: itemData.unit_price || 0,
+          unit_price: itemData.unit_price || 0,
+          total_value: (itemData.unit_price || 0) * (itemData.quantity_received || itemData.quantity_ordered || 1),
+          condition: itemData.condition || 'Good',
+          date_acquired: item.inspection_date || new Date().toISOString().split('T')[0],
+          remarks: itemData.remarks || ''
+        })),
+        remarks: item.overall_remarks || '',
+        status: item.status === 'Accepted' ? 'Submitted' : 'Draft'
+      }));
+      
+      setReceipts(receiptsData);
+    } catch (error: any) {
+      console.error('Error fetching inspected records:', error);
+      setToastMessage('Failed to load inspection records');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewReceipt = (receipt: AcknowledgementReceipt) => {
+    setSelectedReceipt(receipt);
+    setShowDetailModal(true);
+  };
 
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-PH', {
@@ -69,35 +114,6 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
       month: 'short',
       day: 'numeric',
     });
-  };
-
-  const handleCreateNew = () => {
-    setCurrentReceipt({
-      receipt_number: '',
-      date: new Date().toISOString().split('T')[0],
-      acknowledged_by: '',
-      received_by: user?.full_name || user?.username || '',
-      position: '',
-      items: [],
-      remarks: '',
-      status: 'Draft'
-    });
-    setShowModal(true);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      // TODO: Submit to API
-      setToastMessage('Property Acknowledgement Receipt created successfully');
-      setToastType('success');
-      setShowToast(true);
-      setShowModal(false);
-    } catch (error: any) {
-      console.error('Error submitting receipt:', error);
-      setToastMessage(error.response?.data?.message || 'Failed to create property acknowledgement receipt');
-      setToastType('error');
-      setShowToast(true);
-    }
   };
 
   const filteredReceipts = receipts.filter(receipt =>
@@ -126,10 +142,6 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
                 Manage property acknowledgement receipts for assigned items
               </p>
             </div>
-            <Button variant="primary" onClick={handleCreateNew}>
-              <i className="bi bi-plus-circle me-2"></i>
-              New Receipt
-            </Button>
           </div>
         </Col>
       </Row>
@@ -185,7 +197,7 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
                         </Badge>
                       </td>
                       <td>
-                        <Button variant="primary" size="sm">
+                        <Button variant="primary" size="sm" onClick={() => handleViewReceipt(receipt)}>
                           <i className="bi bi-eye me-1"></i>
                           View
                         </Button>
@@ -208,92 +220,103 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
         </Card.Body>
       </Card>
 
-      {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
-        <Modal.Header closeButton className="bg-primary text-white">
-          <Modal.Title>
-            <i className="bi bi-receipt me-2"></i>
-            Property Acknowledgement Receipt
-          </Modal.Title>
+      {/* Detail View Modal */}
+      <Modal 
+        show={showDetailModal} 
+        onHide={() => setShowDetailModal(false)}
+        size="lg"
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Property Acknowledgement Receipt Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Receipt Number *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentReceipt.receipt_number}
-                    onChange={(e) => setCurrentReceipt({ ...currentReceipt, receipt_number: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Date *</Form.Label>
-                  <Form.Control
-                    type="date"
-                    value={currentReceipt.date}
-                    onChange={(e) => setCurrentReceipt({ ...currentReceipt, date: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Acknowledged By *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentReceipt.acknowledged_by}
-                    onChange={(e) => setCurrentReceipt({ ...currentReceipt, acknowledged_by: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Received By *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentReceipt.received_by}
-                    onChange={(e) => setCurrentReceipt({ ...currentReceipt, received_by: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Form.Group className="mb-3">
-              <Form.Label>Position</Form.Label>
-              <Form.Control
-                type="text"
-                value={currentReceipt.position}
-                onChange={(e) => setCurrentReceipt({ ...currentReceipt, position: e.target.value })}
-                placeholder="Enter position..."
-              />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Remarks</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={currentReceipt.remarks}
-                onChange={(e) => setCurrentReceipt({ ...currentReceipt, remarks: e.target.value })}
-                placeholder="Enter remarks..."
-              />
-            </Form.Group>
-          </Form>
+          {selectedReceipt && (
+            <>
+              {/* Header Info */}
+              <Row className="mb-4">
+                <Col md={6}>
+                  <Card className="mb-3">
+                    <Card.Body>
+                      <div className="row mb-2">
+                        <div className="col-6"><strong>PAR No.</strong></div>
+                        <div className="col-6">{selectedReceipt.par_number}</div>
+                      </div>
+                      <div className="row mb-2">
+                        <div className="col-6"><strong>PO No.</strong></div>
+                        <div className="col-6">{selectedReceipt.po_number}</div>
+                      </div>
+                      <div className="row">
+                        <div className="col-6"><strong>Date</strong></div>
+                        <div className="col-6">{formatDate(selectedReceipt.date)}</div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={6}>
+                  <Card className="mb-3">
+                    <Card.Body>
+                      <div className="row mb-2">
+                        <div className="col-6"><strong>Acknowledged By</strong></div>
+                        <div className="col-6">{selectedReceipt.acknowledged_by}</div>
+                      </div>
+                      <div className="row">
+                        <div className="col-6"><strong>Received By</strong></div>
+                        <div className="col-6">{selectedReceipt.received_by}</div>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* Items Section */}
+              <h6 className="fw-bold mb-3">Property Items</h6>
+              <div className="table-responsive mb-4">
+                <Table bordered striped size="sm">
+                  <thead className="bg-light">
+                    <tr>
+                      <th>Property No.</th>
+                      <th>Description</th>
+                      <th>Qty</th>
+                      <th>Unit</th>
+                      <th>Unit Cost</th>
+                      <th>Total Amount</th>
+                      <th>Condition</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedReceipt.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td>{item.property_number}</td>
+                        <td>{item.item_description}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.unit}</td>
+                        <td>{formatCurrency(item.unit_value)}</td>
+                        <td>{formatCurrency(item.total_value)}</td>
+                        <td>{item.condition}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+
+              {/* Remarks */}
+              {selectedReceipt.remarks && (
+                <div className="mb-3">
+                  <strong>Remarks:</strong>
+                  <p className="mb-0">{selectedReceipt.remarks}</p>
+                </div>
+              )}
+            </>
+          )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Cancel
+          <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
+            Close
           </Button>
-          <Button variant="primary" onClick={handleSubmit}>
-            <i className="bi bi-check-circle me-2"></i>
-            Submit
+          <Button variant="primary">
+            <i className="bi bi-printer me-2"></i>
+            Print
           </Button>
         </Modal.Footer>
       </Modal>

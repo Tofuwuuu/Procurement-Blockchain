@@ -24,6 +24,7 @@ interface CustodianSlipItem {
 interface CustodianSlip {
   id?: string;
   slip_number: string;
+  po_number: string;
   date: string;
   received_from: string;
   received_by: string;
@@ -37,21 +38,11 @@ const InventoryCustodianSlip: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [slips, setSlips] = useState<CustodianSlip[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [selectedSlip, setSelectedSlip] = useState<CustodianSlip | null>(null);
-  const [currentSlip, setCurrentSlip] = useState<CustodianSlip>({
-    slip_number: '',
-    date: new Date().toISOString().split('T')[0],
-    received_from: '',
-    received_by: user?.full_name || user?.username || '',
-    items: [],
-    remarks: '',
-    status: 'Draft'
-  });
 
   useEffect(() => {
     fetchInspected();
@@ -66,6 +57,7 @@ const InventoryCustodianSlip: React.FC = () => {
       const slipsData: CustodianSlip[] = inspected.map((item: any, index: number) => ({
         id: item.id || item._id,
         slip_number: `ICS-${new Date().getFullYear()}-${String(index + 1).padStart(4, '0')}`,
+        po_number: item.po_number || 'N/A',
         date: item.inspection_date || new Date().toISOString().split('T')[0],
         received_from: item.inspected_by || 'N/A',
         received_by: item.inspected_by || 'N/A',
@@ -116,34 +108,6 @@ const InventoryCustodianSlip: React.FC = () => {
     });
   };
 
-  const handleCreateNew = () => {
-    setCurrentSlip({
-      slip_number: '',
-      date: new Date().toISOString().split('T')[0],
-      received_from: '',
-      received_by: user?.full_name || user?.username || '',
-      items: [],
-      remarks: '',
-      status: 'Draft'
-    });
-    setShowModal(true);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      // TODO: Submit to API
-      setToastMessage('Inventory Custodian Slip created successfully');
-      setToastType('success');
-      setShowToast(true);
-      setShowModal(false);
-    } catch (error: any) {
-      console.error('Error submitting slip:', error);
-      setToastMessage(error.response?.data?.message || 'Failed to create inventory custodian slip');
-      setToastType('error');
-      setShowToast(true);
-    }
-  };
-
   const filteredSlips = slips.filter(slip =>
     slip.slip_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     slip.received_from.toLowerCase().includes(searchTerm.toLowerCase())
@@ -169,10 +133,6 @@ const InventoryCustodianSlip: React.FC = () => {
                 Manage inventory custodian slips for received items
               </p>
             </div>
-            <Button variant="primary" onClick={handleCreateNew}>
-              <i className="bi bi-plus-circle me-2"></i>
-              New Slip
-            </Button>
           </div>
         </Col>
       </Row>
@@ -255,87 +215,6 @@ const InventoryCustodianSlip: React.FC = () => {
         </Card.Body>
       </Card>
 
-      {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
-        <Modal.Header closeButton className="bg-primary text-white">
-          <Modal.Title>
-            <i className="bi bi-file-earmark-text me-2"></i>
-            Inventory Custodian Slip
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Slip Number *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentSlip.slip_number}
-                    onChange={(e) => setCurrentSlip({ ...currentSlip, slip_number: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Date *</Form.Label>
-                  <Form.Control
-                    type="date"
-                    value={currentSlip.date}
-                    onChange={(e) => setCurrentSlip({ ...currentSlip, date: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Received From *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentSlip.received_from}
-                    onChange={(e) => setCurrentSlip({ ...currentSlip, received_from: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Received By *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={currentSlip.received_by}
-                    onChange={(e) => setCurrentSlip({ ...currentSlip, received_by: e.target.value })}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-            <Form.Group className="mb-3">
-              <Form.Label>Remarks</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={currentSlip.remarks}
-                onChange={(e) => setCurrentSlip({ ...currentSlip, remarks: e.target.value })}
-                placeholder="Enter remarks..."
-              />
-            </Form.Group>
-          </Form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={handleSubmit}>
-            <i className="bi bi-check-circle me-2"></i>
-            Submit
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
       {/* Detail View Modal */}
       <Modal 
         show={showDetailModal} 
@@ -360,7 +239,7 @@ const InventoryCustodianSlip: React.FC = () => {
                       </div>
                       <div className="row mb-2">
                         <div className="col-6"><strong>P.O. No.</strong></div>
-                        <div className="col-6">{selectedSlip.slip_number}</div>
+                        <div className="col-6">{selectedSlip.po_number}</div>
                       </div>
                       <div className="row">
                         <div className="col-6"><strong>Category</strong></div>
