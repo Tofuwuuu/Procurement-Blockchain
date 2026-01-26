@@ -21,6 +21,7 @@ import Inspection from './pages/Inspection';
 import InventoryCustodianSlip from './pages/InventoryCustodianSlip';
 import PropertyAcknowledgementReceipt from './pages/PropertyAcknowledgementReceipt';
 import InventoryTransferReport from './pages/InventoryTransferReport';
+import PropertyTransferReport from './pages/PropertyTransferReport';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
@@ -358,6 +359,17 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <InventoryTransferReport />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/property-transfer-report"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PropertyTransferReport />
               </Layout>
             </ProtectedRoute>
           }
