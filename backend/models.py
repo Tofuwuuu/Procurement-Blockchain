@@ -185,6 +185,94 @@ class PurchaseRequestResponse(BaseModel):
     selected_supplier_ids: Optional[List[str]] = None
     canvass_submitted_at: Optional[str] = None
 
+# Property Return Slip Item model
+class PropertyReturnSlipItem(BaseModel):
+    date_acquired: str
+    property_number: str
+    quantity: int
+    unit: str
+    item_description: str
+    amount: float
+    remarks: Optional[str] = ""
+
+# Property Return Slip model (for creating)
+class CreatePropertyReturnSlip(BaseModel):
+    prs_no: str
+    entity_name: str
+    return_type: str
+    return_type_others: Optional[str] = None
+    items: List[PropertyReturnSlipItem]
+    returned_by: str
+    returned_by_designation: Optional[str] = None
+    returned_by_office: Optional[str] = None
+    returned_date: str
+    received_by: str
+    noted_by: str
+    status: str = "Submitted"
+
+# Property Return Slip model (for response)
+class PropertyReturnSlipResponse(BaseModel):
+    id: str
+    prs_no: str
+    entity_name: str
+    return_type: str
+    return_type_others: Optional[str] = None
+    items: List[PropertyReturnSlipItem]
+    returned_by: str
+    returned_by_designation: Optional[str] = None
+    returned_by_office: Optional[str] = None
+    returned_date: str
+    received_by: str
+    noted_by: str
+    status: str
+    date_created: str
+    date_updated: Optional[str] = None
+
+# Waste Materials Report Item model
+class WasteItem(BaseModel):
+    item_description: str
+    quantity: int
+    unit: str
+    or_number: str
+    or_amount: float
+    disposal_method: str
+    remarks: Optional[str] = ""
+
+# Waste Materials Report model (for creating)
+class CreateWasteMaterialsReport(BaseModel):
+    report_number: str
+    agency: str
+    place_of_storage: str
+    report_date: str
+    certified_by: str
+    certified_by_designation: Optional[str] = None
+    approved_by: str
+    approved_by_designation: Optional[str] = None
+    property_inspector: Optional[str] = None
+    witness_to_disposition: Optional[str] = None
+    items: List[WasteItem]
+    total_amount: float
+    status: str = "Draft"
+
+# Waste Materials Report model (for response)
+class WasteMaterialsReportResponse(BaseModel):
+    id: str
+    report_number: str
+    agency: str
+    place_of_storage: str
+    report_date: str
+    certified_by: str
+    certified_by_designation: Optional[str] = None
+    approved_by: str
+    approved_by_designation: Optional[str] = None
+    property_inspector: Optional[str] = None
+    witness_to_disposition: Optional[str] = None
+    items: List[WasteItem]
+    total_amount: float
+    status: str
+    date_created: str
+    date_updated: Optional[str] = None
+
 # Inspection Item model
 class InspectionItem(BaseModel):
     item_description: str

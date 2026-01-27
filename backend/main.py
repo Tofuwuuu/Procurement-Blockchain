@@ -11,7 +11,8 @@ from database import connect_to_mongo, close_mongo_connection, get_database
 from models import (
     LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse, UpdatePurchaseRequest,
     CreateInspectionReport, InspectionReportResponse, CreateCustodianSlip, CustodianSlipResponse,
-    PendingInspection
+    PendingInspection, CreatePropertyReturnSlip, PropertyReturnSlipResponse,
+    CreateWasteMaterialsReport, WasteMaterialsReportResponse
 )
 from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
@@ -1596,6 +1597,302 @@ async def get_property_transfer_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching transfer report: {str(e)}"
+        )
+
+# ===== PROPERTY RETURN SLIPS =====
+@app.post("/api/property-return-slips", response_model=PropertyReturnSlipResponse)
+async def create_property_return_slip(
+    slip_data: CreatePropertyReturnSlip,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new property return slip"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        print(f"✅ Received property return slip data: {slip_data}")
+        
+        db = await get_database()
+        collection = db.property_return_slips
+        
+        # Prepare the document
+        slip_doc = {
+            "prs_no": slip_data.prs_no,
+            "entity_name": slip_data.entity_name,
+            "return_type": slip_data.return_type,
+            "return_type_others": slip_data.return_type_others or "",
+            "items": [item.dict() for item in slip_data.items],
+            "returned_by": slip_data.returned_by,
+            "returned_by_designation": slip_data.returned_by_designation or "",
+            "returned_by_office": slip_data.returned_by_office or "",
+            "returned_date": slip_data.returned_date,
+            "received_by": slip_data.received_by,
+            "noted_by": slip_data.noted_by,
+            "status": slip_data.status,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Insert document
+        result = await collection.insert_one(slip_doc)
+        slip_doc["id"] = str(result.inserted_id)
+        
+        # Remove MongoDB _id field if present
+        if "_id" in slip_doc:
+            del slip_doc["_id"]
+        
+        return slip_doc
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in POST /api/property-return-slips: {str(e)}")
+        import traceback
+        print(f"Full error traceback:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating property return slip: {str(e)}"
+        )
+
+@app.get("/api/property-return-slips", response_model=list)
+async def get_property_return_slips(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all property return slips"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.property_return_slips
+        
+        # Fetch all slips
+        slips = await collection.find().to_list(None)
+        
+        # Convert ObjectId to string
+        for slip in slips:
+            if "_id" in slip:
+                slip["id"] = str(slip["_id"])
+                del slip["_id"]
+        
+        return slips
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/property-return-slips: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching property return slips: {str(e)}"
+        )
+
+@app.get("/api/property-return-slips/{slip_id}")
+async def get_property_return_slip(
+    slip_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific property return slip"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        from bson import ObjectId
+        db = await get_database()
+        collection = db.property_return_slips
+        
+        # Fetch slip
+        try:
+            slip = await collection.find_one({"_id": ObjectId(slip_id)})
+        except:
+            slip = None
+        
+        if not slip:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Property return slip not found"
+            )
+        
+        # Convert ObjectId to string
+        if "_id" in slip:
+            slip["id"] = str(slip["_id"])
+            del slip["_id"]
+        
+        return slip
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/property-return-slips/{{id}}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching property return slip: {str(e)}"
+        )
+
+# ===== WASTE MATERIALS REPORTS =====
+@app.post("/api/waste-materials-reports", response_model=WasteMaterialsReportResponse)
+async def create_waste_materials_report(
+    report_data: CreateWasteMaterialsReport,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new waste materials report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        print(f"✅ Received waste materials report data: {report_data}")
+        
+        db = await get_database()
+        collection = db.waste_materials_reports
+        
+        # Prepare the document
+        report_doc = {
+            "report_number": report_data.report_number,
+            "agency": report_data.agency,
+            "place_of_storage": report_data.place_of_storage,
+            "report_date": report_data.report_date,
+            "certified_by": report_data.certified_by,
+            "certified_by_designation": report_data.certified_by_designation or "",
+            "approved_by": report_data.approved_by,
+            "approved_by_designation": report_data.approved_by_designation or "",
+            "property_inspector": report_data.property_inspector or "",
+            "witness_to_disposition": report_data.witness_to_disposition or "",
+            "items": [item.dict() for item in report_data.items],
+            "total_amount": report_data.total_amount,
+            "status": report_data.status,
+            "date_created": datetime.now(timezone.utc).isoformat(),
+            "date_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Insert document
+        result = await collection.insert_one(report_doc)
+        report_doc["id"] = str(result.inserted_id)
+        
+        # Remove MongoDB _id field if present
+        if "_id" in report_doc:
+            del report_doc["_id"]
+        
+        return report_doc
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in POST /api/waste-materials-reports: {str(e)}")
+        import traceback
+        print(f"Full error traceback:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating waste materials report: {str(e)}"
+        )
+
+@app.get("/api/waste-materials-reports", response_model=list)
+async def get_waste_materials_reports(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all waste materials reports"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.waste_materials_reports
+        
+        # Fetch all reports
+        reports = await collection.find().to_list(None)
+        
+        # Convert ObjectId to string
+        for report in reports:
+            if "_id" in report:
+                report["id"] = str(report["_id"])
+                del report["_id"]
+        
+        return reports
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/waste-materials-reports: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching waste materials reports: {str(e)}"
+        )
+
+@app.get("/api/waste-materials-reports/{id}", response_model=WasteMaterialsReportResponse)
+async def get_waste_materials_report(
+    id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific waste materials report"""
+    try:
+        # Verify token
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        db = await get_database()
+        collection = db.waste_materials_reports
+        
+        # Fetch report
+        from bson.objectid import ObjectId
+        report = await collection.find_one({"_id": ObjectId(id)})
+        
+        if not report:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Waste materials report not found"
+            )
+        
+        report["id"] = str(report["_id"])
+        del report["_id"]
+        
+        return report
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in GET /api/waste-materials-reports/{{id}}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching waste materials report: {str(e)}"
         )
 
 if __name__ == "__main__":

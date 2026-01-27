@@ -57,19 +57,21 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             
             <Navbar.Collapse id="main-nav">
               <Nav className="me-auto" role="navigation" aria-label="Primary navigation">
-                {/* Dashboard - Available to all authenticated users */}
-                <Nav.Link 
-                  as={Link} 
-                  to="/dashboard" 
-                  active={isActive('/dashboard')}
-                  className="d-flex align-items-center nav-item-custom"
-                >
-                  <i className="bi bi-grid-1x2 me-2"></i>
-                  Dashboard
-                </Nav.Link>
+                {/* Dashboard - Available to all authenticated users except custodian and admin */}
+                {user?.role !== 'custodian' && !user?.is_admin && (
+                  <Nav.Link 
+                    as={Link} 
+                    to="/dashboard" 
+                    active={isActive('/dashboard')}
+                    className="d-flex align-items-center nav-item-custom"
+                  >
+                    <i className="bi bi-grid-1x2 me-2"></i>
+                    Dashboard
+                  </Nav.Link>
+                )}
                 
-                {/* Purchase Request - Available to all authenticated users except custodian, inspector, and canvasser (they have their own link) */}
-                {user?.role !== 'custodian' && user?.role !== 'inspector' && user?.role !== 'canvasser' && (
+                {/* Purchase Request - Available to all authenticated users except custodian, inspector, canvasser, and admin */}
+                {user?.role !== 'custodian' && user?.role !== 'inspector' && user?.role !== 'canvasser' && !user?.is_admin && (
                   <Nav.Link 
                     as={Link} 
                     to="/purchase-request" 
@@ -122,6 +124,26 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                       <i className="bi bi-file-earmark-text me-2"></i>
                       Property Transfer Report
+                    </Nav.Link>
+                    
+                    <Nav.Link 
+                      as={Link} 
+                      to="/property-return-slip" 
+                      active={isActive('/property-return-slip')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-file-earmark-text me-2"></i>
+                      Property Return Slip
+                    </Nav.Link>
+                    
+                    <Nav.Link 
+                      as={Link} 
+                      to="/waste-materials-report" 
+                      active={isActive('/waste-materials-report')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-exclamation-triangle me-2"></i>
+                      Waste Materials Report
                     </Nav.Link>
                   </>
                 )}
@@ -184,61 +206,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 {/* ADMIN-ONLY Navigation Items */}
                 {user?.is_admin && (
                   <>
-                    {/* User Management - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/users" 
-                      active={isActive('/users')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-people me-2"></i>
-                      User Management
-                    </Nav.Link>
-                    
-                    {/* Item Management - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/item-management" 
-                      active={isActive('/item-management')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-box-seam me-2"></i>
-                      Item Management
-                    </Nav.Link>
-                    
-                    {/* Purchase Orders - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/orders" 
-                      active={isActive('/orders')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-cart me-2"></i>
-                      Purchase Orders
-                    </Nav.Link>
-                    
-                    {/* Suppliers - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/suppliers" 
-                      active={isActive('/suppliers')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-building me-2"></i>
-                      Suppliers
-                    </Nav.Link>
-                    
-                    {/* Inventory - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/inventory" 
-                      active={isActive('/inventory')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-box-seam me-2"></i>
-                      Inventory
-                    </Nav.Link>
-                    
                     {/* Blockchain - Admin Only */}
                     <Nav.Link 
                       as={Link} 
@@ -248,17 +215,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                       <i className="bi bi-link-45deg me-2"></i>
                       Blockchain
-                    </Nav.Link>
-                    
-                    {/* Audit Logs - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/audit-logs" 
-                      active={isActive('/audit-logs')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-clock-history me-2"></i>
-                      Audit Logs
                     </Nav.Link>
                   </>
                 )}
@@ -374,17 +330,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   </>
                 )}
                 
-                {/* Reports dropdown - Admin gets full access, others get role-based access */}
-                <Dropdown as={Nav.Item} className="d-flex align-items-center">
-                  <Dropdown.Toggle 
-                    as={Nav.Link} 
-                    className="d-flex align-items-center nav-item-custom"
-                  >
-                    <i className="bi bi-file-text me-2"></i>
-                    Reports
-                    <i className="bi bi-chevron-down ms-1"></i>
-                  </Dropdown.Toggle>
-                  <Dropdown.Menu className="dropdown-menu-custom">
+                {/* Reports dropdown - Admin gets full access, others get role-based access (excluding custodian and admin) */}
+                {user?.role !== 'custodian' && !user?.is_admin && (
+                  <Dropdown as={Nav.Item} className="d-flex align-items-center">
+                    <Dropdown.Toggle 
+                      as={Nav.Link} 
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-file-text me-2"></i>
+                      Reports
+                      <i className="bi bi-chevron-down ms-1"></i>
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="dropdown-menu-custom">
                     {/* Admin role - ALL REPORTS ACCESS */}
                     {user?.is_admin && (
                       <>
@@ -491,6 +448,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     )}
                   </Dropdown.Menu>
                 </Dropdown>
+                )}
               </Nav>
               
               <Nav className="ms-auto" role="navigation" aria-label="User navigation">

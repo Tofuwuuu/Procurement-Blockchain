@@ -22,6 +22,8 @@ import InventoryCustodianSlip from './pages/InventoryCustodianSlip';
 import PropertyAcknowledgementReceipt from './pages/PropertyAcknowledgementReceipt';
 import InventoryTransferReport from './pages/InventoryTransferReport';
 import PropertyTransferReport from './pages/PropertyTransferReport';
+import PropertyReturnSlip from './pages/PropertyReturnSlip';
+import WasteMaterialsReport from './pages/WasteMaterialsReport';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
@@ -370,6 +372,28 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PropertyTransferReport />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/property-return-slip"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PropertyReturnSlip />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/waste-materials-report"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <WasteMaterialsReport />
               </Layout>
             </ProtectedRoute>
           }

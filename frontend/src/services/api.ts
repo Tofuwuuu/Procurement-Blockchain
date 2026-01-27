@@ -876,6 +876,38 @@ export const apiService = {
     return response.data;
   },
 
+  // ===== PROPERTY RETURN SLIPS =====
+  createPropertyReturnSlip: async (data: any): Promise<any> => {
+    const response = await api.post('/api/property-return-slips', data);
+    return response.data;
+  },
+
+  getPropertyReturnSlips: async (): Promise<any[]> => {
+    const response = await api.get('/api/property-return-slips');
+    return response.data;
+  },
+
+  getPropertyReturnSlip: async (id: string): Promise<any> => {
+    const response = await api.get(`/api/property-return-slips/${id}`);
+    return response.data;
+  },
+
+  // ===== WASTE MATERIALS REPORTS =====
+  createWasteMaterialsReport: async (data: any): Promise<any> => {
+    const response = await api.post('/api/waste-materials-reports', data);
+    return response.data;
+  },
+
+  getWasteMaterialsReports: async (): Promise<any[]> => {
+    const response = await api.get('/api/waste-materials-reports');
+    return response.data;
+  },
+
+  getWasteMaterialsReport: async (id: string): Promise<any> => {
+    const response = await api.get(`/api/waste-materials-reports/${id}`);
+    return response.data;
+  },
+
 };
 
 export default api;
