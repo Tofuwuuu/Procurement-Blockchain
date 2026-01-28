@@ -1,0 +1,32 @@
+---
+Organizations:
+- Name: OrdererOrg
+  ID: OrdererMSP
+  MSPDir: /var/hyperledger/orderer/msp
+
+Orderer: &OrdererDefaults
+  OrdererType: solo
+  Addresses:
+    - orderer.example.com:7050
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 10
+    AbsoluteMaxBytes: 98 MB
+    PreferredMaxBytes: 2 MB
+  Organizations: []
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+
+Profiles:
+  SoloGenesis:
+    <<: *OrdererDefaults
+    Orderer:
+      <<: *OrdererDefaults

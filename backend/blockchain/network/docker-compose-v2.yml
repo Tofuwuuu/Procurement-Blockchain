@@ -1,0 +1,269 @@
+version: '2.4'
+
+networks:
+  fabric-network:
+    driver: bridge
+
+volumes:
+  orderer_msp:
+  orderer_ledger:
+  peer0org1_msp:
+  peer0org1_ledger:
+  peer1org1_msp:
+  peer1org1_ledger:
+  peer0org2_msp:
+  peer0org2_ledger:
+  peer1org2_msp:
+  peer1org2_ledger:
+
+services:
+  # Init service - runs once to setup certificates in volumes
+  init-msp:
+    image: alpine:latest
+    command: sh -c '
+      mkdir -p /orderer-msp/signcerts /orderer-msp/keystore;
+      mkdir -p /peer-msp/signcerts /peer-msp/keystore;
+      cat > /orderer-msp/signcerts/cert.pem << "EOF"
+-----BEGIN CERTIFICATE-----
+MIICHjCCAhWgAwIBAgIUBmyfj9ej7Ewd8sVy8eIE0GmqB7swCgYIKoZIzj0EAwIw
+YzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1Nl
+YXR0bGUxDDAKBgNVBAoMA1N0ZTEcMBoGA1UEAwwTY2Eub3JnMS5leGFtcGxlLmNv
+bTAeFw0yNjAxMjcwNDMwMDBaFw0yNzAxMjcwNDMwMDBaMHMxCzAJBgNVBAYTAlVT
+MRMwEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMQwwCgYDVQQK
+DANTdGUxFDASBgNVBAsrCmFkbWluc3RyYXRvcjEhMB8GA1UEAwwYcGVlcjAub3Jn
+MS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHlYGfbvdMFp
+l8tKe0e4XH/PBQP4BxIEGRWRGfAiXPlFoQwDpGfZ8D5J7qQRhQc8u1DG9kQBHpgg
+RjxJLPv7h9GjMjAwMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEFBQcD
+AQYIKwYBBQUHAwIwCgYIKoZIzj0EAwIDRwAwRAIgKN6cQrD7J0FkqvXoMqRCEkqK
+eC4VWXuJmxp5dBSn1lQCIDJf+E7QKZS7Z9V7Yl5CEGIpGpNXYRGJPg2RKrvpJ0CG
+-----END CERTIFICATE-----
+EOF
+      cat > /peer-msp/signcerts/cert.pem << "EOF"
+-----BEGIN CERTIFICATE-----
+MIICHjCCAhWgAwIBAgIUBmyfj9ej7Ewd8sVy8eIE0GmqB7swCgYIKoZIzj0EAwIw
+YzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1Nl
+YXR0bGUxDDAKBgNVBAoMA1N0ZTEcMBoGA1UEAwwTY2Eub3JnMS5leGFtcGxlLmNv
+bTAeFw0yNjAxMjcwNDMwMDBaFw0yNzAxMjcwNDMwMDBaMHMxCzAJBgNVBAYTAlVT
+MRMwEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMQwwCgYDVQQK
+DANTdGUxFDASBgNVBAsrCmFkbWluc3RyYXRvcjEhMB8GA1UEAwwYcGVlcjAub3Jn
+MS5leGFtcGxlLmNvbTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHlYGfbvdMFp
+l8tKe0e4XH/PBQP4BxIEGRWRGfAiXPlFoQwDpGfZ8D5J7qQRhQc8u1DG9kQBHpgg
+RjxJLPv7h9GjMjAwMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEFBQcD
+AQYIKwYBBQUHAwIwCgYIKoZIzj0EAwIDRwAwRAIgKN6cQrD7J0FkqvXoMqRCEkqK
+eC4VWXuJmxp5dBSn1lQCIDJf+E7QKZS7Z9V7Yl5CEGIpGpNXYRGJPg2RKrvpJ0CG
+-----END CERTIFICATE-----
+EOF
+      cat > /orderer-msp/config.yaml << "EOF"
+NodeOUs:
+  Enable: false
+EOF
+      cat > /peer-msp/config.yaml << "EOF"
+NodeOUs:
+  Enable: false
+EOF
+      chmod -R 755 /orderer-msp /peer-msp;
+      echo "✓ MSP certificates initialized";
+    '
+    volumes:
+      - orderer_msp:/orderer-msp
+      - peer0org1_msp:/peer-msp
+      - peer1org1_msp:/peer-msp
+      - peer0org2_msp:/peer-msp
+      - peer1org2_msp:/peer-msp
+    networks:
+      - fabric-network
+
+  # Orderer
+  orderer.example.com:
+    image: hyperledger/fabric-orderer:2.5
+    depends_on:
+      init-msp:
+        condition: service_completed_successfully
+    container_name: orderer.example.com
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_GENESISMETHOD=file
+      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=false
+    volumes:
+      - orderer_msp:/var/hyperledger/orderer/msp
+      - orderer_ledger:/var/hyperledger/orderer/production/orderer
+      - ./config/:/var/hyperledger/orderer/
+    ports:
+      - "7050:7050"
+    networks:
+      - fabric-network
+    command: orderer
+
+  # Peer 0 Org 1
+  peer0.org1.example.com:
+    image: hyperledger/fabric-peer:2.5
+    depends_on:
+      init-msp:
+        condition: service_completed_successfully
+    container_name: peer0.org1.example.com
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - CORE_PEER_ID=peer0.org1.example.com
+      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org1.example.com:8051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_LOCALMSPDIR=/etc/hyperledger/msp/peer
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_CHAINCODE_STARTUPTIMEOUT=300s
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - peer0org1_msp:/etc/hyperledger/msp/peer
+      - peer0org1_ledger:/var/hyperledger/ledger
+    ports:
+      - "7051:7051"
+    networks:
+      - fabric-network
+    command: peer node start
+
+  # Peer 1 Org 1
+  peer1.org1.example.com:
+    image: hyperledger/fabric-peer:2.5
+    depends_on:
+      init-msp:
+        condition: service_completed_successfully
+    container_name: peer1.org1.example.com
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - CORE_PEER_ID=peer1.org1.example.com
+      - CORE_PEER_ADDRESS=peer1.org1.example.com:8051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org1.example.com:8051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_LOCALMSPDIR=/etc/hyperledger/msp/peer
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_CHAINCODE_STARTUPTIMEOUT=300s
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - peer1org1_msp:/etc/hyperledger/msp/peer
+      - peer1org1_ledger:/var/hyperledger/ledger
+    ports:
+      - "8051:8051"
+    networks:
+      - fabric-network
+    command: peer node start
+
+  # Peer 0 Org 2
+  peer0.org2.example.com:
+    image: hyperledger/fabric-peer:2.5
+    depends_on:
+      init-msp:
+        condition: service_completed_successfully
+    container_name: peer0.org2.example.com
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - CORE_PEER_ID=peer0.org2.example.com
+      - CORE_PEER_ADDRESS=peer0.org2.example.com:9051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org2.example.com:10051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org2.example.com:9051
+      - CORE_PEER_LOCALMSPID=Org2MSP
+      - CORE_PEER_LOCALMSPDIR=/etc/hyperledger/msp/peer
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_CHAINCODE_STARTUPTIMEOUT=300s
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - peer0org2_msp:/etc/hyperledger/msp/peer
+      - peer0org2_ledger:/var/hyperledger/ledger
+    ports:
+      - "9051:9051"
+    networks:
+      - fabric-network
+    command: peer node start
+
+  # Peer 1 Org 2
+  peer1.org2.example.com:
+    image: hyperledger/fabric-peer:2.5
+    depends_on:
+      init-msp:
+        condition: service_completed_successfully
+    container_name: peer1.org2.example.com
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - CORE_PEER_ID=peer1.org2.example.com
+      - CORE_PEER_ADDRESS=peer1.org2.example.com:10051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:10051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org2.example.com:9051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org2.example.com:10051
+      - CORE_PEER_LOCALMSPID=Org2MSP
+      - CORE_PEER_LOCALMSPDIR=/etc/hyperledger/msp/peer
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_CHAINCODE_STARTUPTIMEOUT=300s
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - peer1org2_msp:/etc/hyperledger/msp/peer
+      - peer1org2_ledger:/var/hyperledger/ledger
+    ports:
+      - "10051:10051"
+    networks:
+      - fabric-network
+    command: peer node start
+
+  # CouchDB instances for state database
+  couchdb0:
+    image: hyperledger/fabric-couchdb:3.3
+    container_name: couchdb0
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "5984:5984"
+    networks:
+      - fabric-network
+
+  couchdb1:
+    image: hyperledger/fabric-couchdb:3.3
+    container_name: couchdb1
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "6984:5984"
+    networks:
+      - fabric-network
+
+  couchdb2:
+    image: hyperledger/fabric-couchdb:3.3
+    container_name: couchdb2
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "7984:5984"
+    networks:
+      - fabric-network
+
+  couchdb3:
+    image: hyperledger/fabric-couchdb:3.3
+    container_name: couchdb3
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - "8984:5984"
+    networks:
+      - fabric-network

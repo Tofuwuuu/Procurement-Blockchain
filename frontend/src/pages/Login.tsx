@@ -351,7 +351,7 @@ const Login: React.FC = () => {
           <div className="text-center mt-4 ph-footer-info">
             <div className="mb-2">
               <i className="bi bi-geo-alt-fill me-2" aria-hidden="true"></i>
-              <span>123 Ayala Avenue, Makati City, Philippines</span>
+              <span>Market Road, Maduya, Carmona, Cavite, 4116, Philippines</span>
             </div>
             <div>
               <i className="bi bi-card-text me-2" aria-hidden="true"></i>

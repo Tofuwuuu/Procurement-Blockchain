@@ -214,6 +214,24 @@ const mockOrders: PurchaseOrder[] = [
   }
 ];
 
+interface EmployeeFormDataItem {
+  unit: string;
+  item_description: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+interface EmployeeFormData {
+  entity_name: string;
+  fund_cluster: string;
+  office_section: string;
+  responsibility_center_code: string;
+  date: string;
+  remark: string;
+  items: EmployeeFormDataItem[];
+}
+
 const Orders: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -221,12 +239,13 @@ const Orders: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
-  const [searchTerm, setSearchTerm] = useState('');
   const [usingMockData, setUsingMockData] = useState(false);
   const [showItemsModal, setShowItemsModal] = useState(false);
   const [selectedRequestItems, setSelectedRequestItems] = useState<any[]>([]);
@@ -240,7 +259,7 @@ const Orders: React.FC = () => {
   });
 
   // Employee purchase request form state
-  const [employeeFormData, setEmployeeFormData] = useState({
+  const [employeeFormData, setEmployeeFormData] = useState<EmployeeFormData>({
     entity_name: user?.full_name || user?.username || '',
     fund_cluster: '',
     office_section: user?.department || '',
@@ -313,6 +332,17 @@ const Orders: React.FC = () => {
     }));
   };
 
+  // Helper function to hash string to number
+  const hashString = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -353,6 +383,16 @@ const Orders: React.FC = () => {
           );
           setOrders(convertedOrders);
           setUsingMockData(false);
+        } else if (user?.is_admin) {
+          // For admin, fetch all purchase requests and show only "Completed" status
+          console.log('📥 Fetching purchase requests for admin...');
+          const purchaseRequests = await apiService.getPurchaseRequests(false);
+          console.log('✅ Fetched purchase requests:', purchaseRequests);
+          const convertedOrders: PurchaseOrder[] = mapPurchaseRequestsToOrders(purchaseRequests).filter(
+            (o) => o.status === 'Completed'
+          );
+          setOrders(convertedOrders);
+          setUsingMockData(false);
         } else {
           // For other roles, fetch purchase orders (if backend supports it)
           const [ordersData, suppliersData, productsData] = await Promise.all([
@@ -372,8 +412,6 @@ const Orders: React.FC = () => {
         setSuppliers(mockSuppliers);
         setProducts(mockProducts);
         setUsingMockData(true);
-        
-        // No toast notification needed
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -382,22 +420,10 @@ const Orders: React.FC = () => {
       setSuppliers(mockSuppliers);
       setProducts(mockProducts);
       setUsingMockData(true);
-      
-      // No toast notification needed
+      setError(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper function to hash string to number
-  const hashString = (str: string): number => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
   };
 
   const validateForm = (): boolean => {
@@ -676,7 +702,7 @@ const Orders: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig = {
+    const statusConfig: { [key: string]: { variant: string; text: string } } = {
       'Draft': { variant: 'secondary', text: 'Draft' },
       'Pending': { variant: 'warning', text: 'Pending' },
       'Approved': { variant: 'success', text: 'Approved' },
@@ -684,7 +710,7 @@ const Orders: React.FC = () => {
       'Cancelled': { variant: 'danger', text: 'Cancelled' },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || { 
+    const config = statusConfig[status] || { 
       variant: 'secondary', 
       text: status 
     };
@@ -707,16 +733,28 @@ const Orders: React.FC = () => {
   }
 
   return (
-    <Container>
-      {/* Header */}
-      <Row className="mb-4">
+    <Container fluid className="py-5">
+      {error && (
+        <Row className="mb-4">
+          <Col>
+            <Alert variant="danger" dismissible onClose={() => setError(null)}>
+              <i className="bi bi-exclamation-circle me-2"></i>
+              {error}
+            </Alert>
+          </Col>
+        </Row>
+      )}
+
+      {/* Header Section */}
+      <Row className="mb-5">
         <Col>
           <div className="d-flex justify-content-between align-items-center">
             <div>
-              <h1 className="h2 mb-1">
+              <h1 className="fw-bold text-dark mb-2">
+                <i className="bi bi-cart text-primary me-3"></i>
                 {user?.role === 'employee' ? 'Purchase Requests' : 'Purchase Orders'}
               </h1>
-              <p className="text-muted mb-0">
+              <p className="text-muted fs-6">
                 {user?.role === 'employee' 
                   ? 'Manage purchase requests and track procurement activities'
                   : 'Manage purchase orders and track procurement activities'
@@ -725,8 +763,9 @@ const Orders: React.FC = () => {
             </div>
             <Button 
               variant="primary" 
+              size="lg"
               onClick={handleShowModal}
-              aria-label="Create new purchase order"
+              className="px-4 py-2"
             >
               <i className="bi bi-plus-circle me-2"></i>
               {user?.role === 'employee' ? 'New Request' : 'New Order'}
@@ -743,26 +782,11 @@ const Orders: React.FC = () => {
               <Table striped bordered className="mb-0">
                 <thead className="bg-light">
                   <tr>
-                    <th>
-                      STATUS
-                      <i className="bi bi-arrow-up-down ms-2"></i>
-                    </th>
-                    <th>
-                      DATE REQUESTED
-                      <i className="bi bi-arrow-up-down ms-2"></i>
-                    </th>
-                    <th>
-                      REQUESTED BY
-                      <i className="bi bi-arrow-up-down ms-2"></i>
-                    </th>
-                    <th>
-                      P.R. NUMBER
-                      <i className="bi bi-arrow-up-down ms-2"></i>
-                    </th>
-                    <th>
-                      REMARK
-                      <i className="bi bi-arrow-up-down ms-2"></i>
-                    </th>
+                    <th>STATUS</th>
+                    <th>DATE REQUESTED</th>
+                    <th>REQUESTED BY</th>
+                    <th>P.R. NUMBER</th>
+                    <th>REMARK</th>
                     <th>DETAILS</th>
                   </tr>
                 </thead>
@@ -770,7 +794,6 @@ const Orders: React.FC = () => {
                   {orders
                     .filter(order => order.po_number.startsWith('PR-') || user?.role === 'employee')
                     .map((order) => {
-                      // Determine status based on order status
                       let statusBadge = <Badge bg="warning">Pending</Badge>;
                       if (order.status === 'Approved') {
                         statusBadge = <Badge bg="success">Approved</Badge>;
@@ -780,20 +803,14 @@ const Orders: React.FC = () => {
                         statusBadge = <Badge bg="info">For Canvass</Badge>;
                       }
                       
-                      // Format date as YYYY-MM-DD
                       const dateRequested = new Date(order.date_created).toISOString().split('T')[0];
-                      
-                      // P.R. Number - use po_number if it starts with PR, otherwise N/A
                       const prNumber = order.po_number.startsWith('PR-') ? order.po_number : 'N/A';
                       
-                      // Remark from notes - extract if it contains "Fund Cluster" or use as-is
                       let remark = order.notes || 'No remarks';
                       if (remark.includes('Fund Cluster:')) {
-                        // Extract the part after "Fund Cluster:" or use the whole note
                         remark = remark.split('Fund Cluster:')[1]?.split(',')[0]?.trim() || remark;
                       }
                       
-                      // Requested by - use supplier name if it's the entity name, otherwise use current user
                       const requestedBy = order.supplier.name === employeeFormData.entity_name 
                         ? employeeFormData.entity_name 
                         : (user?.full_name || user?.username || 'N/A');
@@ -837,116 +854,114 @@ const Orders: React.FC = () => {
         </Card>
       ) : (
         <>
-          {/* Search */}
+          {/* Search Section */}
           <Row className="mb-4">
             <Col md={6}>
               <InputGroup>
-                <InputGroup.Text>
+                <InputGroup.Text className="bg-light border-light">
                   <i className="bi bi-search"></i>
                 </InputGroup.Text>
                 <Form.Control
-                  type="text"
-                  placeholder="Search orders..."
+                  placeholder="Search by PO number or supplier..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  aria-label="Search orders"
+                  className="border-light"
                 />
               </InputGroup>
             </Col>
           </Row>
 
-          {/* Orders Table */}
-          <Card>
-            <Card.Header>
-              <h5 className="mb-0">Purchase Orders</h5>
-            </Card.Header>
-            <Card.Body className="p-0">
-              {filteredOrders.length > 0 ? (
-                <div className="table-responsive">
-                  <Table striped bordered className="mb-0">
-                    <thead>
-                      <tr>
-                        <th>PO Number</th>
-                        <th>Supplier</th>
-                        <th>Date Created</th>
-                        <th>Status</th>
-                        <th>Total Amount</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredOrders.map((order) => (
-                        <tr key={order.id}>
-                          <td>
-                            <strong>{order.po_number}</strong>
-                          </td>
-                          <td>{order.supplier.name}</td>
-                          <td>{formatDate(order.date_created)}</td>
-                          <td>{getStatusBadge(order.status)}</td>
-                          <td>
-                            <strong>{formatCurrency(order.total_amount)}</strong>
-                          </td>
-                          <td>
-                            <div className="d-flex gap-1">
-                              <Button
-                                variant="outline-primary"
-                                size="sm"
-                                onClick={() => {
-                                  // For employee/canvasser we navigate using PR number (backend can look up by pr_number)
-                                  if (user?.role === 'employee' || user?.role === 'canvasser') {
-                                    navigate(`/orders/${order.po_number}`);
-                                  } else {
-                                    navigate(`/orders/${order.id}`);
-                                  }
-                                }}
-                                aria-label={`View ${order.po_number}`}
-                              >
-                                <i className="bi bi-eye"></i>
-                              </Button>
-                              {order.status === 'Draft' && (
-                                <Button
-                                  variant="outline-success"
-                                  size="sm"
-                                  onClick={() => handleApprove(order.id)}
-                                  aria-label={`Approve ${order.po_number}`}
-                                >
-                                  <i className="bi bi-check"></i>
-                                </Button>
-                              )}
-                              {user?.is_admin && order.status === 'Draft' && (
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => handleDelete(order.id)}
-                                  aria-label={`Delete ${order.po_number}`}
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <i className="bi bi-cart text-muted" style={{ fontSize: '2rem' }}></i>
-                  <p className="text-muted mt-2">
-                    {searchTerm ? 'No orders found matching your search' : 'No purchase orders found'}
-                  </p>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
+          {/* Orders Table Section */}
+          <Row>
+            <Col>
+              <Card className="border-0 shadow-sm rounded-lg overflow-hidden">
+                <Card.Body className="p-0">
+                  {filteredOrders.length > 0 ? (
+                    <div className="table-responsive">
+                      <Table striped bordered hover className="mb-0">
+                        <thead className="bg-light border-bottom">
+                          <tr>
+                            <th className="fw-bold text-dark">PO Number</th>
+                            <th className="fw-bold text-dark">Supplier</th>
+                            <th className="fw-bold text-dark">Date Created</th>
+                            <th className="fw-bold text-dark">Status</th>
+                            <th className="fw-bold text-dark text-end">Total Amount</th>
+                            <th className="fw-bold text-dark text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredOrders.map((order) => (
+                            <tr key={order.id} className="align-middle">
+                              <td className="fw-bold text-primary">{order.po_number}</td>
+                              <td>{order.supplier.name}</td>
+                              <td>{formatDate(order.date_created)}</td>
+                              <td>{getStatusBadge(order.status)}</td>
+                              <td className="text-end">
+                                <span className="fw-bold text-success">{formatCurrency(order.total_amount)}</span>
+                              </td>
+                              <td className="text-center">
+                                <div className="d-flex gap-1 justify-content-center">
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (user?.role === 'employee' || user?.role === 'canvasser') {
+                                        navigate(`/orders/${order.po_number}`);
+                                      } else {
+                                        navigate(`/orders/${order.id}`);
+                                      }
+                                    }}
+                                    aria-label={`View ${order.po_number}`}
+                                  >
+                                    <i className="bi bi-eye"></i>
+                                  </Button>
+                                  {order.status === 'Draft' && (
+                                    <Button
+                                      variant="outline-success"
+                                      size="sm"
+                                      onClick={() => handleApprove(order.id as any)}
+                                      aria-label={`Approve ${order.po_number}`}
+                                    >
+                                      <i className="bi bi-check"></i>
+                                    </Button>
+                                  )}
+                                  {user?.is_admin && order.status === 'Draft' && (
+                                    <Button
+                                      variant="outline-danger"
+                                      size="sm"
+                                      onClick={() => handleDelete(order.id as any)}
+                                      aria-label={`Delete ${order.po_number}`}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <i className="bi bi-cart text-muted" style={{ fontSize: '2rem' }}></i>
+                      <p className="text-muted mt-2">
+                        {searchTerm ? 'No orders found matching your search' : 'No purchase orders found'}
+                      </p>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
         </>
       )}
 
       {/* Order Modal */}
       <Modal show={showModal} onHide={handleCloseModal} size="xl">
-        <Modal.Header closeButton>
-          <Modal.Title>
+        <Modal.Header closeButton className="bg-light border-bottom">
+          <Modal.Title className="fw-bold">
+            <i className="bi bi-file-earmark-plus text-primary me-2"></i>
             {editingOrder 
               ? `Edit ${user?.role === 'employee' ? 'Purchase Request' : 'Purchase Order'}`
               : `Create New ${user?.role === 'employee' ? 'Purchase Request' : 'Purchase Order'}`
@@ -954,7 +969,7 @@ const Orders: React.FC = () => {
           </Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSubmit}>
-          <Modal.Body>
+          <Modal.Body className="p-4">
             {user?.role === 'employee' ? (
               <>
                 {/* PURCHASE REQUEST Section */}
@@ -1060,6 +1075,7 @@ const Orders: React.FC = () => {
                                     setEmployeeFormData({ ...employeeFormData, items: newItems });
                                   }}
                                   placeholder="Unit"
+                                  size="sm"
                                 />
                               </td>
                               <td>
@@ -1072,6 +1088,7 @@ const Orders: React.FC = () => {
                                     setEmployeeFormData({ ...employeeFormData, items: newItems });
                                   }}
                                   placeholder="Item description"
+                                  size="sm"
                                 />
                               </td>
                               <td>
@@ -1086,6 +1103,7 @@ const Orders: React.FC = () => {
                                     newItems[index].total_cost = qty * newItems[index].unit_cost;
                                     setEmployeeFormData({ ...employeeFormData, items: newItems });
                                   }}
+                                  size="sm"
                                 />
                               </td>
                               <td>
@@ -1101,6 +1119,7 @@ const Orders: React.FC = () => {
                                     newItems[index].total_cost = newItems[index].quantity * cost;
                                     setEmployeeFormData({ ...employeeFormData, items: newItems });
                                   }}
+                                  size="sm"
                                 />
                               </td>
                               <td>
@@ -1109,6 +1128,7 @@ const Orders: React.FC = () => {
                                   value={item.total_cost.toFixed(2)}
                                   readOnly
                                   className="bg-light"
+                                  size="sm"
                                 />
                               </td>
                             </tr>
@@ -1173,99 +1193,99 @@ const Orders: React.FC = () => {
                   </Form.Group>
                 </Col>
 
-              <Col md={12}>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h6>Order Items</h6>
-                  <Button type="button" variant="outline-primary" size="sm" onClick={addItem}>
-                    <i className="bi bi-plus me-1"></i>
-                    Add Item
-                  </Button>
-                </div>
+                <Col md={12}>
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6>Order Items</h6>
+                    <Button type="button" variant="outline-primary" size="sm" onClick={addItem}>
+                      <i className="bi bi-plus me-1"></i>
+                      Add Item
+                    </Button>
+                  </div>
 
-                {formData.items.map((item, index) => (
-                  <Card key={index} className="mb-3">
-                    <Card.Body>
-                      <Row className="g-2">
-                        <Col md={4}>
-                          <Form.Group>
-                            <Form.Label>Product</Form.Label>
-                            <Form.Select
-                              value={item.product_id}
-                              onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}
-                            >
-                              <option value={0}>Select Product</option>
-                              {products.map(product => (
-                                <option key={product.id} value={product.id}>{product.name}</option>
-                              ))}
-                            </Form.Select>
-                          </Form.Group>
-                        </Col>
-                        <Col md={2}>
-                          <Form.Group>
-                            <Form.Label>Quantity</Form.Label>
-                            <Form.Control
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={3}>
-                          <Form.Group>
-                            <Form.Label>Unit Price</Form.Label>
-                            <Form.Control
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={item.unit_price}
-                              onChange={(e) => updateItem(index, 'unit_price', Number(e.target.value))}
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={2}>
-                          <Form.Group>
-                            <Form.Label>Total</Form.Label>
-                            <Form.Control
-                              type="text"
-                              value={formatCurrency(item.quantity * item.unit_price)}
-                              readOnly
-                              className="bg-light"
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={1}>
-                          <Form.Group>
-                            <Form.Label>&nbsp;</Form.Label>
-                            <Button
-                              type="button"
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => removeItem(index)}
-                              className="w-100"
-                              aria-label="Remove item"
-                            >
-                              <i className="bi bi-trash"></i>
-                            </Button>
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Card.Body>
-                  </Card>
-                ))}
+                  {formData.items.map((item, index) => (
+                    <Card key={index} className="mb-3">
+                      <Card.Body>
+                        <Row className="g-2">
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label>Product</Form.Label>
+                              <Form.Select
+                                value={item.product_id}
+                                onChange={(e) => updateItem(index, 'product_id', Number(e.target.value))}
+                              >
+                                <option value={0}>Select Product</option>
+                                {products.map(product => (
+                                  <option key={product.id} value={product.id}>{product.name}</option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                          <Col md={2}>
+                            <Form.Group>
+                              <Form.Label>Quantity</Form.Label>
+                              <Form.Control
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={3}>
+                            <Form.Group>
+                              <Form.Label>Unit Price</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={item.unit_price}
+                                onChange={(e) => updateItem(index, 'unit_price', Number(e.target.value))}
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={2}>
+                            <Form.Group>
+                              <Form.Label>Total</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={formatCurrency(item.quantity * item.unit_price)}
+                                readOnly
+                                className="bg-light"
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={1}>
+                            <Form.Group>
+                              <Form.Label>&nbsp;</Form.Label>
+                              <Button
+                                type="button"
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removeItem(index)}
+                                className="w-100"
+                                aria-label="Remove item"
+                              >
+                                <i className="bi bi-trash"></i>
+                              </Button>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                      </Card.Body>
+                    </Card>
+                  ))}
 
-                {formData.items.length > 0 && (
-                  <Alert variant="info">
-                    <strong>Total: {formatCurrency(
-                      formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
-                    )}</strong>
-                  </Alert>
-                )}
-              </Col>
-            </Row>
+                  {formData.items.length > 0 && (
+                    <Alert variant="info">
+                      <strong>Total: {formatCurrency(
+                        formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+                      )}</strong>
+                    </Alert>
+                  )}
+                </Col>
+              </Row>
             )}
           </Modal.Body>
-          <Modal.Footer>
+          <Modal.Footer className="bg-light border-top">
             {user?.role === 'employee' ? (
               <>
                 <Button variant="danger" onClick={handleCloseModal}>
@@ -1338,9 +1358,10 @@ const Orders: React.FC = () => {
       {/* Toast Notification */}
       <Toast
         show={showToast}
+        onClose={() => setShowToast(false)}
         message={toastMessage}
         type={toastType}
-        onClose={() => setShowToast(false)}
+        delay={3000}
       />
     </Container>
   );

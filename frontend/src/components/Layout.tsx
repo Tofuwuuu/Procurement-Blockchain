@@ -1,14 +1,17 @@
-import React, { useEffect } from 'react';
-import { Navbar, Nav, Container, Dropdown, Badge } from 'react-bootstrap';
+import React, { useEffect, useState } from 'react';
+import { Navbar, Nav, Container, Dropdown, Badge, NavDropdown } from 'react-bootstrap';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { initZeroCountHiding } from '../utils';
+import AdminSidebar from './AdminSidebar';
+import './Layout.css';
 import logo from '../image/system logo-03.png';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -33,10 +36,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="d-flex flex-column min-vh-100">
+      {/* Admin Sidebar */}
+      {user?.is_admin && (
+        <AdminSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+      )}
+      
       {/* Header */}
-      <header role="banner">
+      <header role="banner" style={{ backgroundColor: '#1b5e20' }}>
         <Navbar 
-          bg="primary" 
+          style={{ backgroundColor: '#1b5e20' }}
           variant="dark" 
           expand="lg" 
           className="ph-header"
@@ -203,20 +211,17 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                   </>
                 )}
                 
-                {/* ADMIN-ONLY Navigation Items */}
+                {/* ADMIN-ONLY Navigation */}
                 {user?.is_admin && (
-                  <>
-                    {/* Blockchain - Admin Only */}
-                    <Nav.Link 
-                      as={Link} 
-                      to="/blockchain" 
-                      active={isActive('/blockchain')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-link-45deg me-2"></i>
-                      Blockchain
-                    </Nav.Link>
-                  </>
+                  <Nav.Link 
+                    as="button" 
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className="d-flex align-items-center nav-item-custom"
+                    style={{ cursor: 'pointer', border: 'none', background: 'none' }}
+                  >
+                    <i className="bi bi-sidebar me-2"></i>
+                    Admin Panel
+                  </Nav.Link>
                 )}
                 
                 {/* Validator role - blockchain consensus operations */}

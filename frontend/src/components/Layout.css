@@ -1,0 +1,160 @@
+/* CVSU Branding Colors - Green Theme */
+:root {
+  --cvsu-dark-green: #1b5e20;
+  --cvsu-light-green: #2e7d32;
+  --cvsu-medium-green: #4caf50;
+  --cvsu-gold: #ffd700;
+  --cvsu-accent: #1b5e20;
+}
+
+/* Navbar Styling with Green Theme */
+.ph-header {
+  background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%) !important;
+  box-shadow: 0 2px 8px rgba(27, 94, 32, 0.2);
+  padding: 0.75rem 0 !important;
+}
+
+header {
+  background-color: #1b5e20 !important;
+}
+
+header .navbar {
+  background-color: #1b5e20 !important;
+  background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%) !important;
+}
+
+.ph-header .navbar-brand {
+  font-weight: 700;
+  font-size: 1.4rem;
+  letter-spacing: 0.5px;
+  color: #fff !important;
+}
+
+.ph-header .nav-link {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-weight: 500;
+  transition: all 0.25s ease;
+  position: relative;
+  padding: 0.5rem 0.75rem !important;
+  margin: 0 0.25rem;
+  border-radius: 4px;
+}
+
+.ph-header .nav-link:hover {
+  color: #4caf50 !important;
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.ph-header .nav-link.active {
+  color: #4caf50 !important;
+  background-color: rgba(76, 175, 80, 0.15);
+  border-bottom: 2px solid #4caf50;
+}
+
+/* Dropdown styling */
+.ph-header .dropdown-toggle::after {
+  border-top-color: rgba(255, 255, 255, 0.85);
+}
+
+.ph-header .dropdown-toggle:hover::after {
+  border-top-color: #4caf50;
+}
+
+.ph-header .dropdown-menu {
+  background-color: #f8f9fa;
+  border: 1px solid rgba(27, 94, 32, 0.15);
+  box-shadow: 0 8px 24px rgba(27, 94, 32, 0.15);
+  border-radius: 6px;
+  margin-top: 0.5rem;
+}
+
+.ph-header .dropdown-item {
+  color: #1b5e20;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.ph-header .dropdown-item:hover {
+  background-color: rgba(27, 94, 32, 0.05);
+  color: #1b5e20;
+}
+
+.ph-header .dropdown-item.active,
+.ph-header .dropdown-item:active {
+  background-color: rgba(27, 94, 32, 0.1);
+  color: #1b5e20;
+}
+
+/* Badge styling */
+.admin-badge {
+  background-color: #4caf50 !important;
+  color: #fff !important;
+  font-weight: 700;
+  padding: 0.35rem 0.65rem;
+}
+
+/* Nav Item Custom */
+.nav-item-custom {
+  display: flex !important;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* User dropdown */
+.user-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-dropdown-menu {
+  background-color: #f8f9fa;
+  border: 1px solid rgba(27, 94, 32, 0.15);
+  box-shadow: 0 8px 24px rgba(27, 94, 32, 0.15);
+  border-radius: 6px;
+  margin-top: 0.5rem;
+}
+
+.user-dropdown-menu .dropdown-item {
+  color: #1b5e20;
+  transition: all 0.2s ease;
+}
+
+.user-dropdown-menu .dropdown-item:hover {
+  background-color: rgba(27, 94, 32, 0.05);
+  color: #1b5e20;
+}
+
+/* Footer styling */
+footer {
+  background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+  border-top: 2px solid #1b5e20;
+}
+
+footer h5 {
+  color: #1b5e20;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+footer a {
+  color: #1b5e20 !important;
+  transition: color 0.2s ease;
+}
+
+footer a:hover {
+  color: #4caf50 !important;
+  text-decoration: underline !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 991.98px) {
+  .ph-header .navbar-brand {
+    font-size: 1.2rem;
+  }
+
+  .ph-header .nav-link {
+    padding: 0.5rem 1rem !important;
+    margin: 0.25rem 0;
+  }
+}
