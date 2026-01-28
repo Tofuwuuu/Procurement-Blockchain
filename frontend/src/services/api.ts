@@ -908,6 +908,27 @@ export const apiService = {
     return response.data;
   },
 
+  // ===== BLOCKCHAIN INSPECTIONS =====
+  getBlockchainInspections: async (): Promise<any[]> => {
+    const response = await api.get('/api/blockchain/inspections');
+    return response.data;
+  },
+
+  getBlockchainInspection: async (inspectionId: string): Promise<any> => {
+    const response = await api.get(`/api/blockchain/inspections/${inspectionId}`);
+    return response.data;
+  },
+
+  getBlockchainInspectionsByPO: async (poNumber: string): Promise<any[]> => {
+    const response = await api.get(`/api/blockchain/inspections/po/${poNumber}`);
+    return response.data;
+  },
+
+  verifyBlockchainInspection: async (inspectionId: string): Promise<any> => {
+    const response = await api.get(`/api/blockchain/inspections/${inspectionId}/verify`);
+    return response.data;
+  },
+
 };
 
 export default api;

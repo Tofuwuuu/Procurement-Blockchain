@@ -26,6 +26,9 @@ if scraping_path not in sys.path:
     sys.path.append(scraping_path)
 from supplier_api import router as supplier_search_router
 
+# Import blockchain client
+from api.blockchain_client import get_blockchain_client
+
 # Create FastAPI instance
 app = FastAPI(
     title="Blockchain Backend API",
@@ -975,6 +978,37 @@ async def create_inspection_report(
         inspection_report_id = str(result.inserted_id)
         report_doc["id"] = inspection_report_id
         
+        # Record inspection on blockchain (immutable, timestamped, locked)
+        try:
+            blockchain_client = get_blockchain_client()
+            blockchain_result = blockchain_client.record_inspection(
+                inspection_id=inspection_report_id,
+                po_number=report.po_number,
+                inspection_date=report.inspection_date,
+                inspected_by=report.inspected_by,
+                status=report.status,
+                items=[item.dict() for item in report.items],
+                overall_remarks=report.overall_remarks or ""
+            )
+            
+            if blockchain_result["success"]:
+                # Update MongoDB document with blockchain transaction ID
+                await inspection_reports_collection.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {
+                        "blockchain_tx_id": blockchain_result.get("tx_id"),
+                        "blockchain_timestamp": blockchain_result.get("timestamp"),
+                        "blockchain_recorded": True
+                    }}
+                )
+                print(f"✅ Inspection {inspection_report_id} recorded on blockchain: {blockchain_result.get('tx_id')}")
+            else:
+                print(f"⚠️ Failed to record inspection on blockchain: {blockchain_result.get('error')}")
+                # Continue anyway - MongoDB record is saved
+        except Exception as blockchain_error:
+            print(f"⚠️ Blockchain recording error (continuing with MongoDB save): {str(blockchain_error)}")
+            # Continue anyway - MongoDB record is saved
+        
         # Update pending_inspections database - mark as inspected
         pending_inspections_collection = db.pending_inspections
         await pending_inspections_collection.update_one(
@@ -1893,6 +1927,169 @@ async def get_waste_materials_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching waste materials report: {str(e)}"
+        )
+
+# ===== BLOCKCHAIN INSPECTION RECORDS =====
+
+@app.get("/api/blockchain/inspections")
+async def get_blockchain_inspections(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all inspection records from blockchain"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        blockchain_client = get_blockchain_client()
+        
+        # Try to get all inspections from blockchain
+        # If blockchain is not available, fall back to MongoDB records with blockchain info
+        db = await get_database()
+        inspection_reports_collection = db.inspection_reports
+        
+        # Get all inspection reports that have blockchain_recorded flag
+        cursor = inspection_reports_collection.find({
+            "blockchain_recorded": True
+        }).sort("date_created", -1)
+        reports = await cursor.to_list(length=None)
+        
+        result = []
+        for report in reports:
+            report["id"] = str(report["_id"])
+            # Try to get blockchain data if available
+            if report.get("blockchain_tx_id"):
+                try:
+                    blockchain_data = blockchain_client.get_inspection(str(report["_id"]))
+                    if blockchain_data.get("success"):
+                        report["blockchain_data"] = blockchain_data["data"]
+                except:
+                    pass  # Continue without blockchain data if query fails
+            
+            result.append(report)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching blockchain inspections: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching blockchain inspections: {str(e)}"
+        )
+
+@app.get("/api/blockchain/inspections/{inspection_id}")
+async def get_blockchain_inspection(
+    inspection_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a specific inspection record from blockchain"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        blockchain_client = get_blockchain_client()
+        result = blockchain_client.get_inspection(inspection_id)
+        
+        if result["success"]:
+            return result["data"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result.get("error", "Inspection not found on blockchain")
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching blockchain inspection: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching blockchain inspection: {str(e)}"
+        )
+
+@app.get("/api/blockchain/inspections/po/{po_number}")
+async def get_blockchain_inspections_by_po(
+    po_number: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get inspection records by PO number from blockchain"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        blockchain_client = get_blockchain_client()
+        result = blockchain_client.get_inspection_by_po(po_number)
+        
+        if result["success"]:
+            return result["data"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result.get("error", "Inspections not found on blockchain")
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error fetching blockchain inspections by PO: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching blockchain inspections: {str(e)}"
+        )
+
+@app.get("/api/blockchain/inspections/{inspection_id}/verify")
+async def verify_blockchain_inspection(
+    inspection_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Verify the integrity of an inspection record on blockchain"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        blockchain_client = get_blockchain_client()
+        result = blockchain_client.verify_inspection(inspection_id)
+        
+        if result["success"]:
+            return result["data"]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result.get("error", "Inspection not found on blockchain")
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error verifying blockchain inspection: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying blockchain inspection: {str(e)}"
         )
 
 if __name__ == "__main__":

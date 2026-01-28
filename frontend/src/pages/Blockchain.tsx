@@ -1,851 +1,468 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Container, Row, Col, Card, Table, Button, Badge, 
-  Accordion, Form, Modal, Alert, Spinner 
+  Container, Row, Col, Card, Table, Badge, 
+  Form, Button, Modal, Alert, Spinner, InputGroup
 } from 'react-bootstrap';
-import { apiService, Block, Transaction, Peer } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 
-// Realistic blockchain data for procurement system
-const realisticBlocks: Block[] = [
-  {
-    index: 0,
-    timestamp: "2025-01-01T00:00:00Z",
-    transactions: [
-      {
-        from: "system",
-        to: "genesis",
-        amount: 0,
-        action: "genesis",
-        data: { message: "Philippine Procurement Solutions Blockchain Initialized" },
-        timestamp: "2025-01-01T00:00:00Z"
-      }
-    ],
-    nonce: 0,
-    hash: "0000000000000000000000000000000000000000000000000000000000000000",
-    previous_hash: "0"
-  },
-  {
-    index: 1,
-    timestamp: "2025-01-15T10:30:00Z",
-    transactions: [
-      {
-        from: "procurement0",
-        to: "blockchain",
-        amount: 60000.00,
-        action: "po_create",
-        data: {
-          po_number: "PO-20250101-001",
-          supplier: "TechDistributors Inc",
-          amount: 60000.00,
-          items: ["Office Chairs - Ergonomic", "Laptop Stands"]
-        },
-        timestamp: "2025-01-15T10:30:00Z"
-      },
-      {
-        from: "procurement0",
-        to: "blockchain",
-        amount: 0,
-        action: "supplier_add",
-        data: {
-          supplier_name: "TechDistributors Inc",
-          bir_tin: "123-456-789-000",
-          contact: "Juan Dela Cruz"
-        },
-        timestamp: "2025-01-15T10:25:00Z"
-      }
-    ],
-    nonce: 12345,
-    hash: "0000000000000000000000000000000000000000000000000000000000000001",
-    previous_hash: "0000000000000000000000000000000000000000000000000000000000000000"
-  },
-  {
-    index: 2,
-    timestamp: "2025-01-16T14:20:00Z",
-    transactions: [
-      {
-        from: "admin",
-        to: "blockchain",
-        amount: 0,
-        action: "po_approve",
-        data: {
-          po_number: "PO-20250101-001",
-          approved_by: "admin",
-          approval_notes: "Approved for procurement"
-        },
-        timestamp: "2025-01-16T14:20:00Z"
-      },
-      {
-        from: "procurement1",
-        to: "blockchain",
-        amount: 45000.00,
-        action: "po_create",
-        data: {
-          po_number: "PO-20250101-002",
-          supplier: "ABC Supplies",
-          amount: 45000.00,
-          items: ["Wireless Keyboards", "Desk Organizers"]
-        },
-        timestamp: "2025-01-16T14:15:00Z"
-      },
-      {
-        from: "procurement1",
-        to: "blockchain",
-        amount: 0,
-        action: "supplier_add",
-        data: {
-          supplier_name: "ABC Supplies",
-          bir_tin: "234-567-890-000",
-          contact: "Maria Santos"
-        },
-        timestamp: "2025-01-16T14:10:00Z"
-      }
-    ],
-    nonce: 23456,
-    hash: "0000000000000000000000000000000000000000000000000000000000000002",
-    previous_hash: "0000000000000000000000000000000000000000000000000000000000000001"
-  },
-  {
-    index: 3,
-    timestamp: "2025-01-17T09:45:00Z",
-    transactions: [
-      {
-        from: "admin",
-        to: "blockchain",
-        amount: 0,
-        action: "po_approve",
-        data: {
-          po_number: "PO-20250101-002",
-          approved_by: "admin",
-          approval_notes: "Approved with minor adjustments"
-        },
-        timestamp: "2025-01-17T09:45:00Z"
-      },
-      {
-        from: "procurement2",
-        to: "blockchain",
-        amount: 0,
-        action: "inventory_adjust",
-        data: {
-          item: "Office Chairs - Ergonomic",
-          quantity: 20,
-          adjustment_type: "received",
-          reference: "PO-20250101-001"
-        },
-        timestamp: "2025-01-17T09:40:00Z"
-      },
-      {
-        from: "procurement2",
-        to: "blockchain",
-        amount: 0,
-        action: "inventory_adjust",
-        data: {
-          item: "Laptop Stands",
-          quantity: 10,
-          adjustment_type: "received",
-          reference: "PO-20250101-001"
-        },
-        timestamp: "2025-01-17T09:35:00Z"
-      }
-    ],
-    nonce: 34567,
-    hash: "0000000000000000000000000000000000000000000000000000000000000003",
-    previous_hash: "0000000000000000000000000000000000000000000000000000000000000002"
-  },
-  {
-    index: 4,
-    timestamp: "2025-01-18T16:30:00Z",
-    transactions: [
-      {
-        from: "procurement0",
-        to: "blockchain",
-        amount: 75000.00,
-        action: "po_create",
-        data: {
-          po_number: "PO-20250101-003",
-          supplier: "Metro Manila Electronics",
-          amount: 75000.00,
-          items: ["Office Chairs - Ergonomic", "Laptop Stands"]
-        },
-        timestamp: "2025-01-18T16:30:00Z"
-      },
-      {
-        from: "procurement0",
-        to: "blockchain",
-        amount: 0,
-        action: "supplier_add",
-        data: {
-          supplier_name: "Metro Manila Electronics",
-          bir_tin: "345-678-901-000",
-          contact: "Pedro Martinez"
-        },
-        timestamp: "2025-01-18T16:25:00Z"
-      },
-      {
-        from: "finance1",
-        to: "blockchain",
-        amount: 60000.00,
-        action: "payment_processed",
-        data: {
-          po_number: "PO-20250101-001",
-          amount: 60000.00,
-          payment_method: "bank_transfer",
-          reference: "PAY-20250118-001"
-        },
-        timestamp: "2025-01-18T16:20:00Z"
-      }
-    ],
-    nonce: 45678,
-    hash: "0000000000000000000000000000000000000000000000000000000000000004",
-    previous_hash: "0000000000000000000000000000000000000000000000000000000000000003"
-  },
-  {
-    index: 5,
-    timestamp: "2025-01-19T11:15:00Z",
-    transactions: [
-      {
-        from: "admin",
-        to: "blockchain",
-        amount: 0,
-        action: "po_approve",
-        data: {
-          po_number: "PO-20250101-003",
-          approved_by: "admin",
-          approval_notes: "Approved for premium delivery"
-        },
-        timestamp: "2025-01-19T11:15:00Z"
-      },
-      {
-        from: "procurement1",
-        to: "blockchain",
-        amount: 0,
-        action: "inventory_adjust",
-        data: {
-          item: "Wireless Keyboards",
-          quantity: 30,
-          adjustment_type: "received",
-          reference: "PO-20250101-002"
-        },
-        timestamp: "2025-01-19T11:10:00Z"
-      },
-      {
-        from: "procurement1",
-        to: "blockchain",
-        amount: 0,
-        action: "inventory_adjust",
-        data: {
-          item: "Desk Organizers",
-          quantity: 25,
-          adjustment_type: "received",
-          reference: "PO-20250101-002"
-        },
-        timestamp: "2025-01-19T11:05:00Z"
-      },
-      {
-        from: "validator1",
-        to: "blockchain",
-        amount: 0,
-        action: "quality_check",
-        data: {
-          po_number: "PO-20250101-002",
-          status: "passed",
-          inspector: "Ana Reyes",
-          notes: "All items meet quality standards"
-        },
-        timestamp: "2025-01-19T11:00:00Z"
-      }
-    ],
-    nonce: 56789,
-    hash: "0000000000000000000000000000000000000000000000000000000000000005",
-    previous_hash: "0000000000000000000000000000000000000000000000000000000000000004"
-  }
-];
-
-const realisticPeers: Peer[] = [
-  {
-    id: "node-001",
-    url: "http://localhost:3002",
-    is_active: true
-  },
-  {
-    id: "node-002", 
-    url: "http://localhost:3003",
-    is_active: true
-  },
-  {
-    id: "node-003",
-    url: "http://localhost:3004", 
-    is_active: false
-  }
-];
+interface BlockchainInspection {
+  id: string;
+  po_number: string;
+  inspection_date: string;
+  inspected_by: string;
+  status: 'Accepted' | 'Partial' | 'Rejected';
+  items: Array<{
+    item_description: string;
+    quantity_ordered: number;
+    quantity_received: number;
+    unit: string;
+    condition: string;
+    remarks?: string;
+  }>;
+  overall_remarks?: string;
+  blockchain_tx_id?: string;
+  blockchain_timestamp?: string;
+  blockchain_recorded?: boolean;
+  blockchain_data?: {
+    inspectionId: string;
+    timestamp: string;
+    locked: boolean;
+    txId: string;
+    verification?: string;
+  };
+}
 
 const Blockchain: React.FC = () => {
-  const { user } = useAuth();
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [peers, setPeers] = useState<Peer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mining, setMining] = useState(false);
-  const [showAddPeer, setShowAddPeer] = useState(false);
-  const [newPeerUrl, setNewPeerUrl] = useState('');
+  const [inspections, setInspections] = useState<BlockchainInspection[]>([]);
+  const [filteredInspections, setFilteredInspections] = useState<BlockchainInspection[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedInspection, setSelectedInspection] = useState<BlockchainInspection | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<any>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
-  const [usingRealData, setUsingRealData] = useState(false);
 
   useEffect(() => {
-    fetchBlockchainData();
+    fetchBlockchainInspections();
   }, []);
 
-  // Load peers from localStorage when in demo mode
   useEffect(() => {
-    if (usingRealData) {
-      const savedPeers = localStorage.getItem('blockchain_demo_peers');
-      if (savedPeers) {
-        try {
-          const parsedPeers = JSON.parse(savedPeers);
-          setPeers(parsedPeers);
-        } catch (error) {
-          console.error('Failed to parse saved peers:', error);
-        }
-      }
-    }
-  }, [usingRealData]);
+    filterInspections();
+  }, [inspections, searchTerm, statusFilter]);
 
-  const fetchBlockchainData = async () => {
+  const fetchBlockchainInspections = async () => {
     try {
       setLoading(true);
-      
-      // Try to fetch from API first
-      try {
-        const [chainData, peersData] = await Promise.all([
-          apiService.getBlockchain(),
-          apiService.getPeers()
-        ]);
-        
-        // Check if we have real blockchain data
-        if (chainData.chain && chainData.chain.length > 0) {
-          setBlocks(chainData.chain);
-          setPeers(peersData);
-          setUsingRealData(false);
-          console.log('Connected to backend blockchain:', chainData.chain.length, 'blocks');
-        } else {
-          // If backend has no data, seed it with realistic data
-          console.log('Backend has no blockchain data, seeding with realistic data...');
-          await seedBackendWithData();
-          setBlocks(realisticBlocks);
-          setPeers(realisticPeers);
-          setUsingRealData(true);
-          setToastMessage('Backend initialized with realistic blockchain data');
-          setToastType('success');
-          setShowToast(true);
-        }
-             } catch (apiError) {
-         console.log('API not available, using realistic blockchain data...');
-         // Use realistic data if API fails
-         setBlocks(realisticBlocks);
-         
-         // Load saved peers or use default realistic peers
-         const savedPeers = localStorage.getItem('blockchain_demo_peers');
-        if (savedPeers) {
-          try {
-            const parsedPeers = JSON.parse(savedPeers);
-            setPeers(parsedPeers);
-          } catch (error) {
-            setPeers(realisticPeers);
-          }
-        } else {
-          setPeers(realisticPeers);
-        }
-        
-        setUsingRealData(true);
-        
-        // No notification needed for realistic data fallback
-       }
-           } catch (error) {
-         console.error('Failed to fetch blockchain data:', error);
-         // Fallback to realistic data
-         setBlocks(realisticBlocks);
-         
-         // Load saved peers or use default realistic peers
-         const savedPeers = localStorage.getItem('blockchain_demo_peers');
-         if (savedPeers) {
-           try {
-             const parsedPeers = JSON.parse(savedPeers);
-             setPeers(parsedPeers);
-           } catch (error) {
-             setPeers(realisticPeers);
-           }
-         } else {
-           setPeers(realisticPeers);
-         }
-         
-         setUsingRealData(true);
-         
-         // No notification needed for fallback data
-       } finally {
+      const data = await apiService.getBlockchainInspections();
+      // Filter to show only accepted/inspected records
+      const acceptedInspections = data.filter((item: BlockchainInspection) => 
+        item.status === 'Accepted' && item.blockchain_recorded === true
+      );
+      setInspections(acceptedInspections);
+    } catch (error: any) {
+      console.error('Error fetching blockchain inspections:', error);
+      setToastMessage(error.response?.data?.detail || 'Failed to fetch blockchain inspections');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
       setLoading(false);
     }
   };
 
-  const seedBackendWithData = async () => {
-    try {
-      // Create realistic transactions in the backend
-      const transactions = [
-        {
-          from: "procurement0",
-          to: "blockchain",
-          amount: 60000.00,
-          action: "po_create",
-          data: {
-            po_number: "PO-20250101-001",
-            supplier: "TechDistributors Inc",
-            amount: 60000.00,
-            items: ["Office Chairs - Ergonomic", "Laptop Stands"]
-          }
-        },
-        {
-          from: "procurement0",
-          to: "blockchain",
-          amount: 0,
-          action: "supplier_add",
-          data: {
-            supplier_name: "TechDistributors Inc",
-            bir_tin: "123-456-789-000",
-            contact: "Juan Dela Cruz"
-          }
-        },
-        {
-          from: "admin",
-          to: "blockchain",
-          amount: 0,
-          action: "po_approve",
-          data: {
-            po_number: "PO-20250101-001",
-            approved_by: "admin",
-            approval_notes: "Approved for procurement"
-          }
-        }
-      ];
+  const filterInspections = () => {
+    let filtered = [...inspections];
 
-      // Add transactions to backend
-      for (const tx of transactions) {
-        try {
-          await apiService.createTransaction(tx);
-        } catch (error) {
-          console.log('Transaction already exists or failed:', error);
-        }
-      }
-
-      // Mine a block to include the transactions
-      try {
-        await apiService.mineBlock();
-      } catch (error) {
-        console.log('Mining failed:', error);
-      }
-    } catch (error) {
-      console.error('Failed to seed backend data:', error);
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(item =>
+        item.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.inspected_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(item => item.status === statusFilter);
+    }
+
+    setFilteredInspections(filtered);
   };
 
-  const handleMine = async () => {
+  const handleViewDetails = (inspection: BlockchainInspection) => {
+    setSelectedInspection(inspection);
+    setVerificationResult(null);
+    setShowModal(true);
+  };
+
+  const handleVerify = async () => {
+    if (!selectedInspection) return;
+
     try {
-      setMining(true);
-      
-      if (usingRealData) {
-        // Simulate mining for realistic data
-        const newBlock: Block = {
-          index: blocks.length,
-          timestamp: new Date().toISOString(),
-          transactions: [
-            {
-              from: user?.username || "admin",
-              to: "blockchain",
-              amount: 50.00,
-              action: "block_mined",
-              data: {
-                miner: user?.username || "admin",
-                difficulty: 4,
-                reward: 50.00
-              },
-              timestamp: new Date().toISOString()
-            }
-          ],
-          nonce: Math.floor(Math.random() * 100000),
-          hash: `000000000000000000000000000000000000000000000000000000000000000${blocks.length}`,
-          previous_hash: blocks[blocks.length - 1]?.hash || "0"
-        };
-        
-        setBlocks([...blocks, newBlock]);
-        setToastMessage(`Block ${newBlock.index} mined successfully! (Demo)`);
-        setToastType('success');
-        setShowToast(true);
-      } else {
-        // Real API call
-        const newBlock = await apiService.mineBlock();
-        setToastMessage(`Block ${newBlock.index} mined successfully!`);
-        setToastType('success');
-        setShowToast(true);
-        fetchBlockchainData(); // Refresh data
-      }
-    } catch (error) {
-      console.error('Mining failed:', error);
-      setToastMessage('Mining failed');
+      setVerifying(true);
+      const result = await apiService.verifyBlockchainInspection(selectedInspection.id);
+      setVerificationResult(result);
+      setToastMessage('Inspection verified successfully');
+      setToastType('success');
+      setShowToast(true);
+    } catch (error: any) {
+      console.error('Error verifying inspection:', error);
+      setToastMessage(error.response?.data?.detail || 'Failed to verify inspection');
       setToastType('error');
       setShowToast(true);
     } finally {
-      setMining(false);
+      setVerifying(false);
     }
   };
 
-  const handleAddPeer = async () => {
-    if (!newPeerUrl.trim()) return;
-
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
     try {
-             if (usingRealData) {
-         // Simulate adding peer for realistic data
-         const newPeer: Peer = {
-           id: `node-${String(peers.length + 1).padStart(3, '0')}`,
-           url: newPeerUrl,
-           is_active: true
-         };
-         
-         const updatedPeers = [...peers, newPeer];
-         setPeers(updatedPeers);
-         
-         // Save to localStorage for persistence
-         localStorage.setItem('blockchain_demo_peers', JSON.stringify(updatedPeers));
-         
-         setToastMessage('Peer added successfully (Demo)');
-         setToastType('success');
-         setShowToast(true);
-         setShowAddPeer(false);
-         setNewPeerUrl('');
-       } else {
-        // Real API call
-        await apiService.addPeer(newPeerUrl);
-        setToastMessage('Peer added successfully');
-        setToastType('success');
-        setShowToast(true);
-        setShowAddPeer(false);
-        setNewPeerUrl('');
-        fetchBlockchainData(); // Refresh peers
-      }
-    } catch (error) {
-      console.error('Failed to add peer:', error);
-      setToastMessage('Failed to add peer');
-      setToastType('error');
-      setShowToast(true);
+      const date = new Date(dateString);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
     }
   };
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleString('en-PH');
-  };
-
-  const truncateHash = (hash: string, length: number = 8): string => {
-    return hash.length > length ? `${hash.substring(0, length)}...` : hash;
-  };
-
-  const getTransactionType = (action: string): { variant: string; text: string } => {
-    const types = {
-      'genesis': { variant: 'dark', text: 'Genesis Block' },
-      'po_create': { variant: 'primary', text: 'PO Created' },
-      'po_approve': { variant: 'success', text: 'PO Approved' },
-      'inventory_adjust': { variant: 'warning', text: 'Inventory Adjusted' },
-      'supplier_add': { variant: 'info', text: 'Supplier Added' },
-      'payment_processed': { variant: 'success', text: 'Payment Processed' },
-      'quality_check': { variant: 'info', text: 'Quality Check' },
-      'block_mined': { variant: 'secondary', text: 'Block Mined' },
-      'default': { variant: 'secondary', text: action }
+  const getStatusBadge = (status: string) => {
+    const variants: { [key: string]: 'success' | 'warning' | 'danger' } = {
+      'Accepted': 'success',
+      'Partial': 'warning',
+      'Rejected': 'danger'
     };
-    return types[action as keyof typeof types] || types.default;
-  };
-
-  const formatTransactionData = (data: any): string => {
-    if (typeof data === 'string') return data;
-    if (data.po_number) return `PO: ${data.po_number}`;
-    if (data.supplier_name) return `Supplier: ${data.supplier_name}`;
-    if (data.item) return `Item: ${data.item}`;
-    if (data.amount) return `Amount: ₱${data.amount.toLocaleString()}`;
-    if (data.message) return data.message;
-    return JSON.stringify(data, null, 2);
-  };
-
-  const clearDemoData = () => {
-    localStorage.removeItem('blockchain_demo_peers');
-    setPeers(realisticPeers);
-    setToastMessage('Demo data cleared');
-    setToastType('info');
-    setShowToast(true);
+    return <Badge bg={variants[status] || 'secondary'}>{status}</Badge>;
   };
 
   if (loading) {
     return (
-      <Container>
-        <LoadingSpinner size="lg" text="Loading blockchain data..." />
+      <Container className="mt-4">
+        <LoadingSpinner />
       </Container>
     );
   }
 
   return (
-    <Container>
-      {/* Header */}
-      <Row className="mb-4">
+    <Container fluid className="mt-4">
+      <Row>
         <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h1 className="h2 mb-1">Blockchain Explorer</h1>
-              <p className="text-muted mb-0">
-                View blockchain transactions and manage network peers
-                {usingRealData && (
-                  <span className="ms-2 badge bg-info text-dark">Realistic Data</span>
-                )}
-              </p>
-            </div>
-            <div className="d-flex gap-2">
-              {user?.is_admin && (
-                <Button 
-                  variant="success" 
-                  onClick={handleMine}
-                  disabled={mining}
-                  aria-label="Mine new block"
-                >
-                  {mining ? (
-                    <>
-                      <Spinner animation="border" size="sm" className="me-2" />
-                      Mining...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-hammer me-2"></i>
-                      Mine Block
-                    </>
+          <Card>
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <div>
+                <h4 className="mb-0">
+                  <i className="bi bi-link-45deg me-2"></i>
+                  Blockchain Inspection Records
+                </h4>
+                <small className="text-muted">
+                  View immutable inspection records stored on the blockchain
+                </small>
+              </div>
+            </Card.Header>
+            <Card.Body>
+              {/* Filters */}
+              <Row className="mb-3">
+                <Col md={6}>
+                  <InputGroup>
+                    <InputGroup.Text>
+                      <i className="bi bi-search"></i>
+                    </InputGroup.Text>
+                    <Form.Control
+                      type="text"
+                      placeholder="Search by PO number, inspector, or ID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </InputGroup>
+                </Col>
+                <Col md={3}>
+                  <Form.Select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Rejected">Rejected</option>
+                  </Form.Select>
+                </Col>
+                <Col md={3} className="text-end">
+                  <Button variant="outline-primary" onClick={fetchBlockchainInspections}>
+                    <i className="bi bi-arrow-clockwise me-2"></i>
+                    Refresh
+                  </Button>
+                </Col>
+              </Row>
+
+              {/* Summary Stats */}
+              <Row className="mb-3">
+                <Col md={4}>
+                  <Card className="bg-light">
+                    <Card.Body className="py-2">
+                      <small className="text-muted">Total Records</small>
+                      <h5 className="mb-0">{inspections.length}</h5>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card className="bg-light">
+                    <Card.Body className="py-2">
+                      <small className="text-muted">Filtered Results</small>
+                      <h5 className="mb-0">{filteredInspections.length}</h5>
+                    </Card.Body>
+                  </Card>
+                </Col>
+                <Col md={4}>
+                  <Card className="bg-light">
+                    <Card.Body className="py-2">
+                      <small className="text-muted">Locked Records</small>
+                      <h5 className="mb-0">
+                        {inspections.filter(i => i.blockchain_data?.locked).length}
+                      </h5>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* Table */}
+              {filteredInspections.length === 0 ? (
+                <Alert variant="info" className="text-center">
+                  <i className="bi bi-info-circle me-2"></i>
+                  No blockchain inspection records found.
+                  {inspections.length === 0 && (
+                    <div className="mt-2">
+                      <small>Submit inspection reports to see them recorded on the blockchain.</small>
+                    </div>
                   )}
-                </Button>
+                </Alert>
+              ) : (
+                <Table responsive striped hover>
+                  <thead>
+                    <tr>
+                      <th>PO Number</th>
+                      <th>Inspection Date</th>
+                      <th>Inspected By</th>
+                      <th>Status</th>
+                      <th>Blockchain Timestamp</th>
+                      <th>Locked</th>
+                      <th>Transaction ID</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInspections.map((inspection) => (
+                      <tr key={inspection.id}>
+                        <td>
+                          <strong>{inspection.po_number}</strong>
+                        </td>
+                        <td>{formatDate(inspection.inspection_date)}</td>
+                        <td>{inspection.inspected_by}</td>
+                        <td>{getStatusBadge(inspection.status)}</td>
+                        <td>
+                          {inspection.blockchain_data?.timestamp 
+                            ? formatDate(inspection.blockchain_data.timestamp)
+                            : inspection.blockchain_timestamp 
+                            ? formatDate(inspection.blockchain_timestamp)
+                            : 'N/A'}
+                        </td>
+                        <td>
+                          {inspection.blockchain_data?.locked ? (
+                            <Badge bg="success">
+                              <i className="bi bi-lock-fill me-1"></i>
+                              Locked
+                            </Badge>
+                          ) : (
+                            <Badge bg="secondary">
+                              <i className="bi bi-unlock me-1"></i>
+                              Pending
+                            </Badge>
+                          )}
+                        </td>
+                        <td>
+                          <small className="font-monospace">
+                            {inspection.blockchain_data?.txId || inspection.blockchain_tx_id || 'N/A'}
+                          </small>
+                        </td>
+                        <td>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => handleViewDetails(inspection)}
+                          >
+                            <i className="bi bi-eye me-1"></i>
+                            View
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
               )}
-                             <Button 
-                 variant="outline-primary" 
-                 onClick={() => setShowAddPeer(true)}
-                 aria-label="Add new peer"
-               >
-                 <i className="bi bi-plus-circle me-2"></i>
-                 Add Peer
-               </Button>
-               {usingRealData && (
-                 <Button 
-                   variant="outline-secondary" 
-                   onClick={clearDemoData}
-                   aria-label="Clear demo data"
-                   size="sm"
-                 >
-                   <i className="bi bi-trash me-2"></i>
-                   Clear Demo
-                 </Button>
-               )}
-            </div>
-          </div>
-        </Col>
-      </Row>
-
-      {/* Blockchain Stats */}
-      <Row className="g-3 mb-4">
-        <Col md={4}>
-          <Card className="text-center">
-            <Card.Body>
-              <h3 className="text-primary mb-1">{blocks.length}</h3>
-              <p className="text-muted mb-0">Total Blocks</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={4}>
-          <Card className="text-center">
-            <Card.Body>
-              <h3 className="text-success mb-1">
-                {blocks.reduce((total, block) => total + block.transactions.length, 0)}
-              </h3>
-              <p className="text-muted mb-0">Total Transactions</p>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col md={4}>
-          <Card className="text-center">
-            <Card.Body>
-              <h3 className="text-info mb-1">{peers.length}</h3>
-              <p className="text-muted mb-0">Network Peers</p>
             </Card.Body>
           </Card>
         </Col>
       </Row>
 
-      {/* Blockchain Chain */}
-      <Card className="mb-4">
-        <Card.Header>
-          <h5 className="mb-0">Blockchain Chain</h5>
-        </Card.Header>
-        <Card.Body className="p-0">
-          <Accordion>
-            {blocks.map((block, index) => (
-              <Accordion.Item key={block.index} eventKey={index.toString()}>
-                <Accordion.Header>
-                  <div className="d-flex align-items-center w-100">
-                    <span className="fw-bold me-3">Block #{block.index}</span>
-                    <Badge bg="secondary" className="me-3">
-                      {block.transactions.length} transactions
-                    </Badge>
-                    <small className="text-muted ms-auto">
-                      {formatDate(block.timestamp)}
-                    </small>
-                  </div>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <Row className="g-3 mb-3">
-                    <Col md={6}>
-                      <strong>Hash:</strong> 
-                      <code className="ms-2">{truncateHash(block.hash)}</code>
-                    </Col>
-                    <Col md={6}>
-                      <strong>Previous Hash:</strong> 
-                      <code className="ms-2">{truncateHash(block.previous_hash)}</code>
-                    </Col>
-                    <Col md={6}>
-                      <strong>Nonce:</strong> {block.nonce}
-                    </Col>
-                    <Col md={6}>
-                      <strong>Timestamp:</strong> {formatDate(block.timestamp)}
-                    </Col>
-                  </Row>
-                  
-                  {block.transactions.length > 0 ? (
-                    <Table striped bordered size="sm">
-                      <thead>
-                        <tr>
-                          <th>Sender</th>
-                          <th>Recipient</th>
-                          <th>Action</th>
-                          <th>Data</th>
-                          <th>Timestamp</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {block.transactions.map((tx, txIndex) => {
-                          const txType = getTransactionType(tx.action);
-                          return (
-                            <tr key={txIndex}>
-                              <td>
-                                <code>{tx.from}</code>
-                              </td>
-                              <td>
-                                <code>{tx.to}</code>
-                              </td>
-                              <td>
-                                <Badge bg={txType.variant}>{txType.text}</Badge>
-                              </td>
-                              <td>
-                                <small className="text-muted">
-                                  {formatTransactionData(tx.data)}
-                                </small>
-                              </td>
-                              <td>{formatDate(tx.timestamp)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </Table>
-                  ) : (
-                    <Alert variant="info" className="mb-0">
-                      No transactions in this block
-                    </Alert>
-                  )}
-                </Accordion.Body>
-              </Accordion.Item>
-            ))}
-          </Accordion>
-        </Card.Body>
-      </Card>
-
-      {/* Network Peers */}
-      <Card>
-        <Card.Header>
-          <h5 className="mb-0">Network Peers</h5>
-        </Card.Header>
-        <Card.Body className="p-0">
-          {peers.length > 0 ? (
-            <Table striped bordered className="mb-0">
-              <thead>
-                <tr>
-                  <th>Peer ID</th>
-                  <th>URL</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {peers.map((peer) => (
-                  <tr key={peer.id}>
-                    <td>
-                      <code>{peer.id}</code>
-                    </td>
-                    <td>
-                      <code>{peer.url}</code>
-                    </td>
-                    <td>
-                      <Badge bg={peer.is_active ? 'success' : 'danger'}>
-                        {peer.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          ) : (
-            <div className="text-center py-4">
-              <i className="bi bi-wifi-off text-muted" style={{ fontSize: '2rem' }}></i>
-              <p className="text-muted mt-2">No peers connected</p>
-            </div>
-          )}
-        </Card.Body>
-      </Card>
-
-      {/* Add Peer Modal */}
-      <Modal show={showAddPeer} onHide={() => setShowAddPeer(false)}>
+      {/* Detail Modal */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Add New Peer</Modal.Title>
+          <Modal.Title>
+            <i className="bi bi-link-45deg me-2"></i>
+            Inspection Record Details
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form>
-            <Form.Group>
-              <Form.Label htmlFor="peerUrl">Peer URL</Form.Label>
-              <Form.Control
-                id="peerUrl"
-                type="url"
-                placeholder="http://localhost:5001"
-                value={newPeerUrl}
-                onChange={(e) => setNewPeerUrl(e.target.value)}
-                aria-describedby="peerUrlHelp"
-              />
-              <Form.Text id="peerUrlHelp" className="text-muted">
-                Enter the URL of the peer node you want to connect to
-              </Form.Text>
-            </Form.Group>
-          </Form>
+          {selectedInspection && (
+            <>
+              <Row className="mb-3">
+                <Col md={6}>
+                  <strong>PO Number:</strong>
+                  <p>{selectedInspection.po_number}</p>
+                </Col>
+                <Col md={6}>
+                  <strong>Inspection Date:</strong>
+                  <p>{formatDate(selectedInspection.inspection_date)}</p>
+                </Col>
+                <Col md={6}>
+                  <strong>Inspected By:</strong>
+                  <p>{selectedInspection.inspected_by}</p>
+                </Col>
+                <Col md={6}>
+                  <strong>Status:</strong>
+                  <p>{getStatusBadge(selectedInspection.status)}</p>
+                </Col>
+                <Col md={6}>
+                  <strong>Blockchain Timestamp:</strong>
+                  <p>
+                    {selectedInspection.blockchain_data?.timestamp 
+                      ? formatDate(selectedInspection.blockchain_data.timestamp)
+                      : selectedInspection.blockchain_timestamp 
+                      ? formatDate(selectedInspection.blockchain_timestamp)
+                      : 'N/A'}
+                  </p>
+                </Col>
+                <Col md={6}>
+                  <strong>Record Status:</strong>
+                  <p>
+                    {selectedInspection.blockchain_data?.locked ? (
+                      <Badge bg="success">
+                        <i className="bi bi-lock-fill me-1"></i>
+                        Locked (Immutable)
+                      </Badge>
+                    ) : (
+                      <Badge bg="warning">
+                        <i className="bi bi-unlock me-1"></i>
+                        Pending Lock
+                      </Badge>
+                    )}
+                  </p>
+                </Col>
+                <Col md={12}>
+                  <strong>Transaction ID:</strong>
+                  <p className="font-monospace small">
+                    {selectedInspection.blockchain_data?.txId || selectedInspection.blockchain_tx_id || 'N/A'}
+                  </p>
+                </Col>
+                {selectedInspection.overall_remarks && (
+                  <Col md={12}>
+                    <strong>Overall Remarks:</strong>
+                    <p>{selectedInspection.overall_remarks}</p>
+                  </Col>
+                )}
+              </Row>
+
+              <hr />
+
+              <h6 className="mb-3">Inspection Items</h6>
+              <Table striped size="sm">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Qty Ordered</th>
+                    <th>Qty Received</th>
+                    <th>Unit</th>
+                    <th>Condition</th>
+                    {selectedInspection.items.some(item => item.remarks) && <th>Remarks</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInspection.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.item_description}</td>
+                      <td>{item.quantity_ordered}</td>
+                      <td>{item.quantity_received}</td>
+                      <td>{item.unit}</td>
+                      <td>
+                        <Badge bg={item.condition === 'Good' ? 'success' : 'warning'}>
+                          {item.condition}
+                        </Badge>
+                      </td>
+                      {selectedInspection.items.some(i => i.remarks) && (
+                        <td>{item.remarks || '-'}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+
+              {verificationResult && (
+                <>
+                  <hr />
+                  <h6 className="mb-3">Verification Result</h6>
+                  <Alert variant={verificationResult.verification === 'PASS' ? 'success' : 'warning'}>
+                    <strong>Status:</strong> {verificationResult.verification}
+                    <br />
+                    <strong>Locked:</strong> {verificationResult.locked ? 'Yes' : 'No'}
+                    <br />
+                    <strong>Immutable:</strong> {verificationResult.isImmutable ? 'Yes' : 'No'}
+                    <br />
+                    <strong>History Count:</strong> {verificationResult.historyCount}
+                  </Alert>
+                </>
+              )}
+            </>
+          )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowAddPeer(false)}>
-            Cancel
+          <Button variant="secondary" onClick={() => setShowModal(false)}>
+            Close
           </Button>
-          <Button variant="primary" onClick={handleAddPeer} disabled={!newPeerUrl.trim()}>
-            Add Peer
+          <Button 
+            variant="primary" 
+            onClick={handleVerify}
+            disabled={verifying}
+          >
+            {verifying ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                <i className="bi bi-shield-check me-2"></i>
+                Verify Integrity
+              </>
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Toast Notification */}
       <Toast
         show={showToast}
+        onClose={() => setShowToast(false)}
         message={toastMessage}
         type={toastType}
-        onClose={() => setShowToast(false)}
       />
     </Container>
   );

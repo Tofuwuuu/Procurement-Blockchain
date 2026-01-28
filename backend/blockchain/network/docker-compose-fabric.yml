@@ -68,6 +68,8 @@ services:
       - /var/run/docker.sock:/host/var/run/docker.sock
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp:/etc/hyperledger/fabric/msp
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config:/work/crypto-config
+      - ./artifacts:/work/artifacts
       - peer0_org1_data:/var/hyperledger/production
     depends_on:
       - orderer.example.com
@@ -133,6 +135,8 @@ services:
       - /var/run/docker.sock:/host/var/run/docker.sock
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer1.org1.example.com/msp:/etc/hyperledger/fabric/msp
       - ./crypto-config/peerOrganizations/org1.example.com/peers/peer1.org1.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config:/work/crypto-config
+      - ./artifacts:/work/artifacts
       - peer1_org1_data:/var/hyperledger/production
     depends_on:
       - orderer.example.com
@@ -198,6 +202,8 @@ services:
       - /var/run/docker.sock:/host/var/run/docker.sock
       - ./crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/msp:/etc/hyperledger/fabric/msp
       - ./crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls:/etc/hyperledger/fabric/tls
+      - ./crypto-config:/work/crypto-config
+      - ./artifacts:/work/artifacts
       - peer0_org2_data:/var/hyperledger/production
     depends_on:
       - orderer.example.com
