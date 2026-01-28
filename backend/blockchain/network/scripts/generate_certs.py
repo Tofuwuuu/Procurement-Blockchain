@@ -52,22 +52,35 @@ def generate_certificate(path, cn, org):
         datetime.datetime.utcnow() + datetime.timedelta(days=365)
     ).sign(private_key, hashes.SHA256())
     
-    # Save private key
+    # Save private key for both signing and TLS
+    key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    
     with open(f"{path}/keystore/key.pem", "wb") as f:
-        f.write(private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ))
+        f.write(key_pem)
+    
+    # For TLS, create server.key and server.crt
+    with open(f"{path}/server.key", "wb") as f:
+        f.write(key_pem)
     
     # Save certificate
     cert_pem = cert.public_bytes(serialization.Encoding.PEM)
     with open(f"{path}/signcerts/cert.pem", "wb") as f:
         f.write(cert_pem)
     
+    # For TLS, create server.crt
+    with open(f"{path}/server.crt", "wb") as f:
+        f.write(cert_pem)
+    
     # Copy to cacerts and tlscacerts
     shutil.copy(f"{path}/signcerts/cert.pem", f"{path}/cacerts/ca.pem")
     shutil.copy(f"{path}/signcerts/cert.pem", f"{path}/tlscacerts/tlsca.pem")
+    
+    # Also create ca.crt in the path root for TLS
+    shutil.copy(f"{path}/signcerts/cert.pem", f"{path}/ca.crt")
     
     print(f"[OK] Generated certs for {cn}")
 
@@ -93,14 +106,24 @@ def main():
     orderer_org = f"{crypto_dir}/ordererOrganizations/example.com"
     orderer_orderers = f"{orderer_org}/orderers"
     orderer_msp = f"{orderer_org}/msp"
+    orderer_tls = f"{orderer_orderers}/orderer.example.com/tls"
     
     os.makedirs(f"{orderer_orderers}/orderer.example.com", exist_ok=True)
     os.makedirs(orderer_msp, exist_ok=True)
     
     generate_certificate(f"{orderer_orderers}/orderer.example.com", "orderer.example.com", "OrdererOrg")
     
+    # Ensure all MSP subdirectories exist
     os.makedirs(f"{orderer_msp}/signcerts", exist_ok=True)
+    os.makedirs(f"{orderer_msp}/keystore", exist_ok=True)
+    os.makedirs(f"{orderer_msp}/cacerts", exist_ok=True)
+    os.makedirs(f"{orderer_msp}/tlscacerts", exist_ok=True)
+    
+    # Copy orderer certs to org MSP
     shutil.copy(f"{orderer_orderers}/orderer.example.com/signcerts/cert.pem", f"{orderer_msp}/signcerts/cert.pem")
+    shutil.copy(f"{orderer_orderers}/orderer.example.com/keystore/key.pem", f"{orderer_msp}/keystore/key.pem")
+    shutil.copy(f"{orderer_orderers}/orderer.example.com/cacerts/ca.pem", f"{orderer_msp}/cacerts/ca.pem")
+    shutil.copy(f"{orderer_orderers}/orderer.example.com/tlscacerts/tlsca.pem", f"{orderer_msp}/tlscacerts/tlsca.pem")
     
     with open(f"{orderer_msp}/config.yaml", "w") as f:
         f.write("NodeOUs:\n  Enable: false\n")
