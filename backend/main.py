@@ -1021,8 +1021,63 @@ async def create_inspection_report(
         )
         print(f"✅ Updated inspection status for {report.po_number} in pending_inspections database")
         
-        # If status is "Accepted", automatically create custodian slip
+        # If status is "Accepted", save to inspected collection and record on blockchain
         if report.status.lower() == "accepted":
+            inspected_collection = db.inspected
+            
+            # Create inspected document
+            inspected_doc = {
+                "po_number": report.po_number,
+                "inspection_date": report.inspection_date,
+                "inspected_by": report.inspected_by,
+                "items": [item.dict() for item in report.items],
+                "overall_remarks": report.overall_remarks or "",
+                "status": report.status,
+                "date_created": datetime.now(timezone.utc).isoformat(),
+                "date_updated": None,
+                "inspection_report_id": inspection_report_id
+            }
+            
+            # Insert or update inspected record
+            inspected_result = await inspected_collection.update_one(
+                {"po_number": report.po_number},
+                {"$set": inspected_doc},
+                upsert=True
+            )
+            
+            # Get the inspected document ID for blockchain
+            inspected_record = await inspected_collection.find_one({"po_number": report.po_number})
+            inspected_id = str(inspected_record["_id"])
+            
+            # Record to blockchain using inspected collection ID
+            try:
+                blockchain_result = blockchain_client.record_inspection(
+                    inspection_id=inspected_id,
+                    po_number=report.po_number,
+                    inspection_date=report.inspection_date,
+                    inspected_by=report.inspected_by,
+                    status=report.status,
+                    items=[item.dict() for item in report.items],
+                    overall_remarks=report.overall_remarks or ""
+                )
+                
+                if blockchain_result.get("success"):
+                    # Update inspected collection with blockchain info
+                    await inspected_collection.update_one(
+                        {"_id": inspected_record["_id"]},
+                        {"$set": {
+                            "blockchain_tx_id": blockchain_result.get("tx_id"),
+                            "blockchain_timestamp": blockchain_result.get("timestamp"),
+                            "blockchain_recorded": True
+                        }}
+                    )
+                    print(f"✅ Accepted inspection {inspected_id} recorded on blockchain: {blockchain_result.get('tx_id')}")
+                else:
+                    print(f"⚠️ Failed to record accepted inspection on blockchain: {blockchain_result.get('error')}")
+            except Exception as blockchain_error:
+                print(f"⚠️ Blockchain recording error for accepted inspection: {str(blockchain_error)}")
+            
+            # Automatically create custodian slip
             # Generate slip number
             slip_counter = await db.counters.find_one_and_update(
                 {"_id": "custodian_slip_id"},
@@ -1935,7 +1990,12 @@ async def get_waste_materials_report(
 async def get_blockchain_inspections(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Get all inspection records from blockchain"""
+    """
+    Return all Accepted records from the `inspected` collection, with blockchain sync metadata.
+
+    IMPORTANT: This endpoint is intentionally fast and does NOT attempt to sync to blockchain
+    (sync can be slow / time out). Use POST /api/blockchain/inspections/sync for syncing.
+    """
     try:
         token = credentials.credentials
         payload = decode_access_token(token)
@@ -1946,32 +2006,39 @@ async def get_blockchain_inspections(
                 detail="Invalid or expired token"
             )
         
-        blockchain_client = get_blockchain_client()
-        
-        # Try to get all inspections from blockchain
-        # If blockchain is not available, fall back to MongoDB records with blockchain info
         db = await get_database()
-        inspection_reports_collection = db.inspection_reports
+        inspected_collection = db.inspected
         
-        # Get all inspection reports that have blockchain_recorded flag
-        cursor = inspection_reports_collection.find({
-            "blockchain_recorded": True
+        # Get all accepted inspections from the inspected collection
+        cursor = inspected_collection.find({
+            "status": "Accepted"
         }).sort("date_created", -1)
         reports = await cursor.to_list(length=None)
         
         result = []
+        from bson.objectid import ObjectId
+        
         for report in reports:
-            report["id"] = str(report["_id"])
-            # Try to get blockchain data if available
-            if report.get("blockchain_tx_id"):
-                try:
-                    blockchain_data = blockchain_client.get_inspection(str(report["_id"]))
-                    if blockchain_data.get("success"):
-                        report["blockchain_data"] = blockchain_data["data"]
-                except:
-                    pass  # Continue without blockchain data if query fails
+            # Convert ObjectId to string and create clean response dict
+            report_id = str(report["_id"])
             
-            result.append(report)
+            # Create clean dict without ObjectId to avoid serialization issues
+            clean_report = {
+                "id": report_id,
+                "po_number": report.get("po_number", ""),
+                "inspection_date": report.get("inspection_date", ""),
+                "inspected_by": report.get("inspected_by", ""),
+                "status": report.get("status", "Accepted"),
+                "items": report.get("items", []),
+                "overall_remarks": report.get("overall_remarks", ""),
+                "date_created": report.get("date_created", ""),
+                "date_updated": report.get("date_updated"),
+                "blockchain_tx_id": report.get("blockchain_tx_id"),
+                "blockchain_timestamp": report.get("blockchain_timestamp"),
+                "blockchain_recorded": report.get("blockchain_recorded", False)
+            }
+
+            result.append(clean_report)
         
         return result
         
@@ -1979,6 +2046,8 @@ async def get_blockchain_inspections(
         raise
     except Exception as e:
         print(f"❌ Error fetching blockchain inspections: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching blockchain inspections: {str(e)}"
@@ -2090,6 +2159,112 @@ async def verify_blockchain_inspection(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error verifying blockchain inspection: {str(e)}"
+        )
+
+@app.post("/api/blockchain/inspections/sync")
+async def sync_inspections_to_blockchain(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Manually sync all inspected records to blockchain"""
+    try:
+        token = credentials.credentials
+        payload = decode_access_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        blockchain_client = get_blockchain_client()
+        db = await get_database()
+        inspected_collection = db.inspected
+        
+        # Get all accepted inspections that haven't been synced
+        cursor = inspected_collection.find({
+            "status": "Accepted",
+            "$or": [
+                {"blockchain_recorded": {"$ne": True}},
+                {"blockchain_recorded": None},
+                {"blockchain_tx_id": {"$exists": False}}
+            ]
+        }).sort("date_created", -1)
+        reports = await cursor.to_list(length=None)
+        
+        synced_count = 0
+        failed_count = 0
+        results = []
+        
+        for report in reports:
+            report_id = str(report["_id"])
+            try:
+                print(f"🔄 Syncing inspection {report_id} (PO: {report.get('po_number')}) to blockchain...")
+                blockchain_result = blockchain_client.record_inspection(
+                    inspection_id=report_id,
+                    po_number=report.get("po_number", ""),
+                    inspection_date=report.get("inspection_date", ""),
+                    inspected_by=report.get("inspected_by", ""),
+                    status=report.get("status", "Accepted"),
+                    items=report.get("items", []),
+                    overall_remarks=report.get("overall_remarks", "")
+                )
+                
+                if blockchain_result.get("success"):
+                    # Update MongoDB record with blockchain info
+                    from bson.objectid import ObjectId
+                    await inspected_collection.update_one(
+                        {"_id": ObjectId(report_id)},
+                        {"$set": {
+                            "blockchain_tx_id": blockchain_result.get("tx_id"),
+                            "blockchain_timestamp": blockchain_result.get("timestamp"),
+                            "blockchain_recorded": True
+                        }}
+                    )
+                    synced_count += 1
+                    results.append({
+                        "inspection_id": report_id,
+                        "po_number": report.get("po_number"),
+                        "status": "success",
+                        "tx_id": blockchain_result.get("tx_id")
+                    })
+                    print(f"✅ Synced inspection {report_id} to blockchain")
+                else:
+                    failed_count += 1
+                    results.append({
+                        "inspection_id": report_id,
+                        "po_number": report.get("po_number"),
+                        "status": "failed",
+                        "error": blockchain_result.get("error")
+                    })
+                    print(f"❌ Failed to sync inspection {report_id}: {blockchain_result.get('error')}")
+            except Exception as sync_error:
+                failed_count += 1
+                results.append({
+                    "inspection_id": report_id,
+                    "po_number": report.get("po_number"),
+                    "status": "error",
+                    "error": str(sync_error)
+                })
+                print(f"❌ Error syncing inspection {report_id}: {str(sync_error)}")
+        
+        return {
+            "success": True,
+            "message": f"Sync completed: {synced_count} synced, {failed_count} failed",
+            "synced_count": synced_count,
+            "failed_count": failed_count,
+            "total": len(reports),
+            "results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error syncing inspections to blockchain: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error syncing inspections: {str(e)}"
         )
 
 if __name__ == "__main__":

@@ -47,6 +47,7 @@ const Blockchain: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchBlockchainInspections();
@@ -60,11 +61,9 @@ const Blockchain: React.FC = () => {
     try {
       setLoading(true);
       const data = await apiService.getBlockchainInspections();
-      // Filter to show only accepted/inspected records
-      const acceptedInspections = data.filter((item: BlockchainInspection) => 
-        item.status === 'Accepted' && item.blockchain_recorded === true
-      );
-      setInspections(acceptedInspections);
+      // Show ALL accepted inspections from MongoDB, with blockchain sync flags.
+      // (Do not hide records just because blockchain sync failed.)
+      setInspections(data);
     } catch (error: any) {
       console.error('Error fetching blockchain inspections:', error);
       setToastMessage(error.response?.data?.detail || 'Failed to fetch blockchain inspections');
@@ -121,6 +120,27 @@ const Blockchain: React.FC = () => {
     }
   };
 
+  const handleSyncToBlockchain = async () => {
+    try {
+      setSyncing(true);
+      const response = await apiService.syncInspectionsToBlockchain();
+      setToastMessage(
+        `Sync completed: ${response.synced_count} synced, ${response.failed_count} failed`
+      );
+      setToastType(response.failed_count === 0 ? 'success' : 'warning');
+      setShowToast(true);
+      // Refresh the list
+      await fetchBlockchainInspections();
+    } catch (error: any) {
+      console.error('Error syncing to blockchain:', error);
+      setToastMessage(error.response?.data?.detail || 'Failed to sync inspections to blockchain');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
     try {
@@ -144,6 +164,23 @@ const Blockchain: React.FC = () => {
       'Rejected': 'danger'
     };
     return <Badge bg={variants[status] || 'secondary'}>{status}</Badge>;
+  };
+
+  const getSyncBadge = (inspection: BlockchainInspection) => {
+    if (inspection.blockchain_recorded) {
+      return (
+        <Badge bg="success">
+          <i className="bi bi-check-circle me-1"></i>
+          Synced
+        </Badge>
+      );
+    }
+    return (
+      <Badge bg="warning" text="dark">
+        <i className="bi bi-exclamation-circle me-1"></i>
+        Pending
+      </Badge>
+    );
   };
 
   if (loading) {
@@ -198,6 +235,24 @@ const Blockchain: React.FC = () => {
                   </Form.Select>
                 </Col>
                 <Col md={3} className="text-end">
+                  <Button 
+                    variant="success" 
+                    onClick={handleSyncToBlockchain}
+                    disabled={syncing}
+                    className="me-2"
+                  >
+                    {syncing ? (
+                      <>
+                        <Spinner size="sm" className="me-2" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-cloud-upload me-2"></i>
+                        Sync to Blockchain
+                      </>
+                    )}
+                  </Button>
                   <Button variant="outline-primary" onClick={fetchBlockchainInspections}>
                     <i className="bi bi-arrow-clockwise me-2"></i>
                     Refresh
@@ -239,10 +294,10 @@ const Blockchain: React.FC = () => {
               {filteredInspections.length === 0 ? (
                 <Alert variant="info" className="text-center">
                   <i className="bi bi-info-circle me-2"></i>
-                  No blockchain inspection records found.
+                  No inspection records found.
                   {inspections.length === 0 && (
                     <div className="mt-2">
-                      <small>Submit inspection reports to see them recorded on the blockchain.</small>
+                      <small>Submit inspection reports to see them listed here.</small>
                     </div>
                   )}
                 </Alert>
@@ -254,6 +309,7 @@ const Blockchain: React.FC = () => {
                       <th>Inspection Date</th>
                       <th>Inspected By</th>
                       <th>Status</th>
+                      <th>Sync Status</th>
                       <th>Blockchain Timestamp</th>
                       <th>Locked</th>
                       <th>Transaction ID</th>
@@ -269,6 +325,7 @@ const Blockchain: React.FC = () => {
                         <td>{formatDate(inspection.inspection_date)}</td>
                         <td>{inspection.inspected_by}</td>
                         <td>{getStatusBadge(inspection.status)}</td>
+                        <td>{getSyncBadge(inspection)}</td>
                         <td>
                           {inspection.blockchain_data?.timestamp 
                             ? formatDate(inspection.blockchain_data.timestamp)
@@ -285,7 +342,7 @@ const Blockchain: React.FC = () => {
                           ) : (
                             <Badge bg="secondary">
                               <i className="bi bi-unlock me-1"></i>
-                              Pending
+                              N/A
                             </Badge>
                           )}
                         </td>

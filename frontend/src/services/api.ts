@@ -929,6 +929,11 @@ export const apiService = {
     return response.data;
   },
 
+  syncInspectionsToBlockchain: async (): Promise<any> => {
+    const response = await api.post('/api/blockchain/inspections/sync');
+    return response.data;
+  },
+
 };
 
 export default api;
