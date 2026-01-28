@@ -1,0 +1,30 @@
+{
+  "header": {
+    "number": 0,
+    "previous_hash": "",
+    "data_hash": ""
+  },
+  "data": {
+    "data": []
+  },
+  "metadata": {
+    "metadata": []
+  },
+  "organizations": [
+    {
+      "name": "OrdererMSP",
+      "msp_id": "OrdererMSP",
+      "certificate": "crypto-config/ordererOrganizations/example.com/msp/signcerts/cert.pem"
+    },
+    {
+      "name": "Org1MSP",
+      "msp_id": "Org1MSP",
+      "certificate": "crypto-config/peerOrganizations/org1.example.com/msp/signcerts/cert.pem"
+    },
+    {
+      "name": "Org2MSP",
+      "msp_id": "Org2MSP",
+      "certificate": "crypto-config/peerOrganizations/org2.example.com/msp/signcerts/cert.pem"
+    }
+  ]
+}

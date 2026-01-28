@@ -1,0 +1,118 @@
+{
+  "header": {
+    "number": "0",
+    "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "data_hash": "a1c7a016e61544690e1b7c183ac4dceeec1bc83f156c44fee679ea88b39ed7ff"
+  },
+  "data": {
+    "data": [
+      {
+        "payload": {
+          "header": {
+            "channel_header": {
+              "type": "CONFIG",
+              "version": 1,
+              "timestamp": "2026-01-28T01:41:04.563706",
+              "channel_id": "systemchannel",
+              "tx_id": "",
+              "epoch": 0
+            },
+            "signature_header": {
+              "creator": "OrdererMSP",
+              "nonce": ""
+            }
+          },
+          "data": {
+            "config": {
+              "channel_group": {
+                "groups": {
+                  "Application": {
+                    "groups": {
+                      "Org1MSP": {
+                        "mod_policy": "Admins",
+                        "policies": {},
+                        "values": {},
+                        "version": 0
+                      },
+                      "Org2MSP": {
+                        "mod_policy": "Admins",
+                        "policies": {},
+                        "values": {},
+                        "version": 0
+                      }
+                    },
+                    "mod_policy": "Admins",
+                    "policies": {},
+                    "values": {},
+                    "version": 0
+                  },
+                  "Orderer": {
+                    "groups": {
+                      "OrdererMSP": {
+                        "mod_policy": "Admins",
+                        "policies": {},
+                        "values": {},
+                        "version": 0
+                      }
+                    },
+                    "mod_policy": "Admins",
+                    "policies": {},
+                    "values": {},
+                    "version": 0
+                  },
+                  "Consortiums": {
+                    "groups": {
+                      "SampleConsortium": {
+                        "groups": {
+                          "Org1MSP": {
+                            "mod_policy": "Admins",
+                            "policies": {},
+                            "values": {},
+                            "version": 0
+                          },
+                          "Org2MSP": {
+                            "mod_policy": "Admins",
+                            "policies": {},
+                            "values": {},
+                            "version": 0
+                          }
+                        },
+                        "mod_policy": "Admins",
+                        "policies": {},
+                        "values": {},
+                        "version": 0
+                      }
+                    },
+                    "mod_policy": "Admins",
+                    "policies": {},
+                    "values": {},
+                    "version": 0
+                  }
+                },
+                "mod_policy": "Admins",
+                "policies": {},
+                "values": {},
+                "version": 0
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "metadata": [
+      {
+        "SIGNATURES": []
+      },
+      {
+        "LAST_CONFIG": 0
+      },
+      {
+        "TRANSACTIONS_FILTER": [
+          0
+        ]
+      }
+    ]
+  }
+}

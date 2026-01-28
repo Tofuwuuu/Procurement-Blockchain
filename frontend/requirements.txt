@@ -2,3 +2,111 @@ Flask==2.0.3
 Flask-WTF==1.0.1
 WTForms==3.0.0
 
+3. Generate Fabric Certs
+4. Start Fabric Network (docker-compose)
+5. Deploy Chaincode
+6. Frontend
+
+1 Orderer with certificates and keys
+4 Peers (2 in Org1, 2 in Org2)
+4 Admins + 2 Users
+All MSP configuration files
+
+onfirmation: Is this setup correct?
+1️⃣ Certificates – crypto-config/ ✅
+
+Correct
+
+This directory contains:
+
+Orderer identities
+
+4 peer identities (2 per org)
+
+Admin identities
+
+User identities
+
+What it does (simple):
+It proves who is allowed to join and act in the blockchain network.
+
+You need this for:
+
+Authentication
+
+Access control
+
+Accountability
+
+2️⃣ Channel configuration – configtx.yaml ✅
+
+Correct
+
+This file defines:
+
+Which organizations exist
+
+Which peers belong to which org
+
+How consensus works
+
+Channel policies
+
+Simple explanation:
+This file is the rulebook of the blockchain network.
+
+3️⃣ Genesis block – orderer.genesis.block ✅
+
+Correct and required
+
+This is:
+
+The first block
+
+Used only by the orderer
+
+Created before the network starts
+
+Simple explanation:
+It is the startup block that allows the orderer to run.
+
+4️⃣ Channel artifacts ✅
+
+All of these are correct.
+
+procurementchannel.tx.json ✅
+
+Defines:
+
+The procurement channel
+
+Which organizations join it
+
+Simple:
+This creates the shared ledger for procurement.
+
+
+Directory Structure:
+  crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp/
+   signcerts/        (orderer signing certificate)
+   keystore/         (private key)
+   admincerts/       (admin certificate)
+   cacerts/          (CA certificate)
+   tlscacerts/       (TLS CA certificate)
+   config.yaml       (MSP configuration)
+
+ All Required Certificates:
+   orderer.example.com-cert.pem (signing cert)
+   key.pem (private key)
+   cert.pem (admin cert)
+   ca.pem (CA cert)
+   tlsca.pem (TLS CA cert)
+
+ -First 5
+
+  couchdb0:
+    container_name: couchdb0
+      COUCHDB_PASSWORD: adminpw
+      COUCHDB_USER: admin
+    image: couchdb:3.2.2
+

@@ -1,0 +1,100 @@
+# Peer Core Configuration for Hyperledger Fabric 2.5
+logging:
+  level: info
+  format: '%{color}%{time:2006-01-02 15:04:05.000 MST} [%{module}] %{shortfunc} -> %{level:.4s} %{id:03x}%{color:reset} %{message}'
+
+peer:
+  id: ""
+  networkId: dev
+  listenAddress: 0.0.0.0:7051
+  chaincodeListenAddress: 0.0.0.0:7052
+  address: peer0.org1.example.com:7051
+  addressAutoDetect: false
+  
+  tls:
+    enabled: true
+    cert:
+      file: /etc/hyperledger/fabric/tls/server.crt
+    key:
+      file: /etc/hyperledger/fabric/tls/server.key
+    rootcert:
+      file: /etc/hyperledger/fabric/tls/ca.crt
+    clientRootCAs:
+      files: []
+    clientAuthRequired: false
+  
+  mspConfigPath: /etc/hyperledger/fabric/msp
+  localMspId: Org1MSP
+  
+  bccsp:
+    default: SW
+    sw:
+      hash: SHA2
+      security: 256
+      filekeystore:
+        keystore: msp/keystore
+  
+  fileSystemPath: /var/hyperledger/production
+
+  chaincode:
+    id:
+      path: ""
+      name: ""
+    installTimeout: 300s
+    startTimeout: 300s
+    executetimeout: 30s
+    mode: net
+    keepalive: 5s
+    system:
+      cscc: enable
+      lscc: enable
+      escc: enable
+      vscc: enable
+      qscc: enable
+
+  discovery:
+    enabled: true
+    authCacheEnabled: true
+    authCacheMaxSize: 1000
+    authCachePurgeRetentionRatio: 0.75
+    orgMembersAllowedAccess: false
+
+  gateway:
+    enabled: false
+
+vm:
+  endpoint: unix:///host/var/run/docker.sock
+  docker:
+    hostConfig:
+      NetworkMode: fabric
+      LogConfig:
+        Type: json-file
+        Config:
+          max-size: 100m
+          max-file: "5"
+      Memory: 2147483648
+
+ledger:
+  state:
+    stateDatabase: CouchDB
+    couchDBConfig:
+      couchDBAddress: couchdb0:5984
+      username: admin
+      password: adminpw
+      maxRetries: 3
+      requestTimeout: 35s
+  history:
+    enableHistoryDatabase: true
+
+operations:
+  listenAddress: 127.0.0.1:9443
+  tls:
+    enabled: false
+
+metrics:
+  provider: prometheus
+  statsd:
+    network: udp
+    address: localhost:8125
+    writeInterval: 10s
+    prefix: ""

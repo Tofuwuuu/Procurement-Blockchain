@@ -1,0 +1,11 @@
+{
+  "channel_id": "procurementchannel",
+  "type": "ANCHOR_PEERS_UPDATE",
+  "org": "Org2MSP",
+  "anchor_peers": [
+    {
+      "host": "peer0.org2.example.com",
+      "port": 9051
+    }
+  ]
+}
