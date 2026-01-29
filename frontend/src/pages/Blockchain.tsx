@@ -102,6 +102,12 @@ const Blockchain: React.FC = () => {
 
   const handleVerify = async () => {
     if (!selectedInspection) return;
+    if (!selectedInspection.blockchain_recorded || !selectedInspection.blockchain_tx_id) {
+      setToastMessage('This record is not synced to blockchain yet. Click "Sync to Blockchain" first.');
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
 
     try {
       setVerifying(true);
@@ -498,7 +504,11 @@ const Blockchain: React.FC = () => {
           <Button 
             variant="primary" 
             onClick={handleVerify}
-            disabled={verifying}
+            disabled={
+              verifying ||
+              !selectedInspection?.blockchain_recorded ||
+              !selectedInspection?.blockchain_tx_id
+            }
           >
             {verifying ? (
               <>

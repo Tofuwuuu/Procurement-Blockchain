@@ -18,6 +18,18 @@ class BlockchainClient:
         self.peer_address = os.getenv("FABRIC_PEER_ADDRESS", "peer0.org1.example.com:7051")
         self.orderer_address = os.getenv("FABRIC_ORDERER_ADDRESS", "orderer.example.com:7050")
         self.network_dir = os.getenv("FABRIC_NETWORK_DIR", "../blockchain/network")
+        self.command_timeout_seconds = int(os.getenv("FABRIC_COMMAND_TIMEOUT_SECONDS", "60"))
+
+    @staticmethod
+    def _is_already_locked_error(err: str) -> bool:
+        if not err:
+            return False
+        e = err.lower()
+        return (
+            "already recorded and locked" in e
+            or "already recorded" in e and "locked" in e
+            or "cannot modify" in e and "locked" in e
+        )
         
     def _run_peer_command(self, command: List[str], org: str = "org1") -> Dict:
         """
@@ -30,19 +42,21 @@ class BlockchainClient:
         Returns:
             Dict with success status and result/error
         """
-        # Fix org name if it has typo (org11 -> org1)
-        if org == "org11":
+        # Guard against accidental typos in org name
+        if org not in ("org1", "org2"):
             org = "org1"
-        
+
         peer_container = f"peer0.{org}.example.com"
-        
-        # Set environment variables for peer command
-        # Disable TLS for now to avoid connection issues
+
+        # Peer containers are configured with TLS enabled (docker-compose).
+        # Use Org Admin identity (mounted at /work/crypto-config) so policies like
+        # /Channel/Application/Readers and Writers are satisfied.
         env_vars = {
             "CORE_PEER_LOCALMSPID": f"{org.capitalize()}MSP",
-            "CORE_PEER_TLS_ENABLED": "false",  # Disable TLS to avoid connection issues
+            "CORE_PEER_TLS_ENABLED": "true",
+            "CORE_PEER_TLS_ROOTCERT_FILE": f"/work/crypto-config/peerOrganizations/{org}.example.com/peers/{peer_container}/tls/ca.crt",
             "CORE_PEER_MSPCONFIGPATH": f"/work/crypto-config/peerOrganizations/{org}.example.com/users/Admin@{org}.example.com/msp",
-            "CORE_PEER_ADDRESS": f"{peer_container}:{7051 if org == 'org1' else 9051}"
+            "CORE_PEER_ADDRESS": f"{peer_container}:{7051 if org == 'org1' else 9051}",
         }
         
         # Build docker exec command
@@ -50,6 +64,7 @@ class BlockchainClient:
             "docker", "exec",
             "-e", f"CORE_PEER_LOCALMSPID={env_vars['CORE_PEER_LOCALMSPID']}",
             "-e", f"CORE_PEER_TLS_ENABLED={env_vars['CORE_PEER_TLS_ENABLED']}",
+            "-e", f"CORE_PEER_TLS_ROOTCERT_FILE={env_vars['CORE_PEER_TLS_ROOTCERT_FILE']}",
             "-e", f"CORE_PEER_MSPCONFIGPATH={env_vars['CORE_PEER_MSPCONFIGPATH']}",
             "-e", f"CORE_PEER_ADDRESS={env_vars['CORE_PEER_ADDRESS']}",
             peer_container,
@@ -61,7 +76,7 @@ class BlockchainClient:
                 docker_cmd,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=self.command_timeout_seconds
             )
             
             if result.returncode == 0:
@@ -114,35 +129,39 @@ class BlockchainClient:
         Returns:
             Dict with success status and transaction details
         """
-        # Prepare arguments
         items_json = json.dumps(items)
-        
-        # Build invoke command - use proper format for chaincode
-        # The -c flag expects a JSON string with function and Args
-        chaincode_args = json.dumps({
-            "function": "recordInspection",
+
+        # Fabric contract-api uses "ContractName:functionName" as the first arg.
+        # Our contract name is InspectionContract (see chaincode constructor).
+        ctor = {
             "Args": [
+                "InspectionContract:recordInspection",
                 inspection_id,
                 po_number,
                 inspection_date,
                 inspected_by,
                 status,
                 items_json,
-                overall_remarks
+                overall_remarks or "",
             ]
-        })
-        
+        }
+
         command = [
             "chaincode", "invoke",
             "-o", self.orderer_address,
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
             "-C", self.channel_name,
             "-n", self.chaincode_name,
-            "-c", chaincode_args
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
+            "--peerAddresses", "peer0.org2.example.com:9051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt",
         ]
         
-        # Note: TLS is disabled for now - can be enabled later if needed
-        
-        result = self._run_peer_command(command)
+        # Use org1 peer container to submit the tx
+        result = self._run_peer_command(command, org="org1")
         
         if result["success"]:
             return {
@@ -150,9 +169,21 @@ class BlockchainClient:
                 "message": "Inspection recorded on blockchain",
                 "inspection_id": inspection_id,
                 "timestamp": datetime.utcnow().isoformat(),
-                "tx_id": result["result"] if result["result"] else "pending"
+                # peer chaincode invoke output doesn't reliably include txid; treat as recorded
+                "tx_id": None,
+                "raw": result["result"]
             }
         else:
+            # Idempotency: if chaincode says it's already locked, treat as success
+            if self._is_already_locked_error(result.get("error") or ""):
+                return {
+                    "success": True,
+                    "message": "Inspection already recorded and locked on blockchain",
+                    "inspection_id": inspection_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "tx_id": None,
+                    "raw": result.get("error") or ""
+                }
             return {
                 "success": False,
                 "error": result["error"],
@@ -169,17 +200,19 @@ class BlockchainClient:
         Returns:
             Dict with inspection record or error
         """
+        ctor = {"Args": ["InspectionContract:getInspection", inspection_id]}
         command = [
             "chaincode", "query",
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
             "-C", self.channel_name,
             "-n", self.chaincode_name,
-            "-c", json.dumps({
-                "function": "getInspection",
-                "Args": [inspection_id]
-            })
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
         ]
         
-        result = self._run_peer_command(command)
+        result = self._run_peer_command(command, org="org1")
         
         if result["success"]:
             try:
@@ -209,19 +242,19 @@ class BlockchainClient:
         Returns:
             Dict with list of inspection records
         """
-        chaincode_args = json.dumps({
-            "function": "getInspectionByPO",
-            "Args": [po_number]
-        })
-        
+        ctor = {"Args": ["InspectionContract:getInspectionByPO", po_number]}
         command = [
             "chaincode", "query",
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
             "-C", self.channel_name,
             "-n", self.chaincode_name,
-            "-c", chaincode_args
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
         ]
         
-        result = self._run_peer_command(command)
+        result = self._run_peer_command(command, org="org1")
         
         if result["success"]:
             try:
@@ -251,19 +284,19 @@ class BlockchainClient:
         Returns:
             Dict with verification result
         """
-        chaincode_args = json.dumps({
-            "function": "verifyInspection",
-            "Args": [inspection_id]
-        })
-        
+        ctor = {"Args": ["InspectionContract:verifyInspection", inspection_id]}
         command = [
             "chaincode", "query",
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
             "-C", self.channel_name,
             "-n", self.chaincode_name,
-            "-c", chaincode_args
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
         ]
         
-        result = self._run_peer_command(command)
+        result = self._run_peer_command(command, org="org1")
         
         if result["success"]:
             try:

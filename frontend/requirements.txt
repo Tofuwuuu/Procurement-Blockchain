@@ -110,3 +110,30 @@ Directory Structure:
       COUCHDB_USER: admin
     image: couchdb:3.2.2
 
+
+testing smart contract
+docker exec peer0.org1.example.com `
+  peer chaincode query -C procurementchannel -n inspection `
+  -c '{"Args":["getAllInspections"]}'
+
+STEP 4 — Query the Blockchain (Read Data)
+
+Purpose: Prove the record exists and is immutable.
+
+peer chaincode query \
+  -C procurementchannel \
+  -n inspectioncc \
+  -c '{"Args":["QueryInspection","PO123"]}'
+
+
+Result:
+You see:
+
+Purchase Order ID
+
+Inspection result
+
+Timestamp
+
+Inspector ID
+

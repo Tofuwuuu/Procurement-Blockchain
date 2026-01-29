@@ -11,8 +11,9 @@ $networkDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $chaincodeDir = Join-Path (Split-Path -Parent $networkDir) "chaincode"
 $CHANNEL_NAME = "procurementchannel"
 $CHAINCODE_NAME = "inspection"
-$CHAINCODE_VERSION = "1.0"
+$CHAINCODE_VERSION = "1.3"
 $CHAINCODE_PATH = "inspection_contract"
+$CHAINCODE_SEQUENCE = 4
 
 Set-Location $networkDir
 
@@ -113,7 +114,7 @@ docker exec -e CORE_PEER_LOCALMSPID=Org1MSP `
         --name ${CHAINCODE_NAME} `
         --version ${CHAINCODE_VERSION} `
         --package-id ${PACKAGE_ID} `
-        --sequence 1 `
+        --sequence ${CHAINCODE_SEQUENCE} `
         --tls `
         --cafile /work/artifacts/orderer_tls_ca.crt `
         --signature-policy "AND('Org1MSP.peer','Org2MSP.peer')"
@@ -138,7 +139,7 @@ docker exec -e CORE_PEER_LOCALMSPID=Org2MSP `
         --name ${CHAINCODE_NAME} `
         --version ${CHAINCODE_VERSION} `
         --package-id ${PACKAGE_ID} `
-        --sequence 1 `
+        --sequence ${CHAINCODE_SEQUENCE} `
         --tls `
         --cafile /work/artifacts/orderer_tls_ca.crt `
         --signature-policy "AND('Org1MSP.peer','Org2MSP.peer')"
@@ -163,7 +164,7 @@ docker exec -e CORE_PEER_LOCALMSPID=Org1MSP `
         --channelID ${CHANNEL_NAME} `
         --name ${CHAINCODE_NAME} `
         --version ${CHAINCODE_VERSION} `
-        --sequence 1 `
+        --sequence ${CHAINCODE_SEQUENCE} `
         --tls `
         --cafile /work/artifacts/orderer_tls_ca.crt `
         --peerAddresses peer0.org1.example.com:7051 `

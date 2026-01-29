@@ -39,7 +39,8 @@ class InspectionContract extends Contract {
         
         if (existing && existing.length > 0) {
             const existingRecord = JSON.parse(existing.toString());
-            if (existingRecord.locked) {
+            const alreadyLocked = Boolean(existingRecord.locked || existingRecord.islocked);
+            if (alreadyLocked) {
                 throw new Error(`Inspection ${inspectionId} is already recorded and locked. Cannot modify.`);
             }
         }
@@ -48,9 +49,10 @@ class InspectionContract extends Contract {
         const txTimestamp = ctx.stub.getTxTimestamp();
         const timestamp = new Date(txTimestamp.seconds.low * 1000).toISOString();
         
-        // Get transaction creator (inspector)
-        const creator = ctx.stub.getCreator();
-        const creatorMspId = ctx.stub.getMspId();
+        // Get transaction creator MSP (for auditability)
+        // `stub.getMspId()` is not available in Fabric Node chaincode API;
+        // use clientIdentity instead.
+        const creatorMspId = ctx.clientIdentity.getMSPID();
         
         // Parse items
         let items;
@@ -72,7 +74,8 @@ class InspectionContract extends Contract {
             timestamp: timestamp,
             txId: ctx.stub.getTxID(),
             creatorMspId: creatorMspId,
-            locked: true, // Lock immediately upon creation
+            locked: true,  // Back-compat
+            islocked: true, // Matches API/UI field name
             createdAt: timestamp,
             updatedAt: timestamp
         };
@@ -217,12 +220,24 @@ class InspectionContract extends Contract {
         const inspectionKey = ctx.stub.createCompositeKey('inspection', [inspectionId]);
         const iterator = await ctx.stub.getHistoryForKey(inspectionKey);
         const results = [];
+
+        const toIsoTimestamp = (ts) => {
+            if (!ts || !ts.seconds) return null;
+            let seconds = ts.seconds;
+            if (typeof seconds === 'object' && seconds !== null && typeof seconds.low === 'number') {
+                seconds = seconds.low;
+            } else if (typeof seconds === 'string') {
+                seconds = parseInt(seconds, 10);
+            }
+            if (typeof seconds !== 'number' || Number.isNaN(seconds)) return null;
+            return new Date(seconds * 1000).toISOString();
+        };
         
         let result = await iterator.next();
         while (!result.done) {
             const historyItem = {
                 txId: result.value.txId,
-                timestamp: new Date(result.value.timestamp.seconds.low * 1000).toISOString(),
+                timestamp: toIsoTimestamp(result.value.timestamp),
                 isDelete: result.value.isDelete,
                 value: result.value.isDelete ? null : JSON.parse(result.value.value.toString())
             };
@@ -244,16 +259,18 @@ class InspectionContract extends Contract {
     async verifyInspection(ctx, inspectionId) {
         const inspection = await this.getInspection(ctx, inspectionId);
         const history = await this.getInspectionHistory(ctx, inspectionId);
+        const isLocked = Boolean(inspection.locked || inspection.islocked);
         
         return {
             inspectionId: inspectionId,
             exists: true,
-            locked: inspection.locked,
+            locked: isLocked,
+            islocked: isLocked,
             txId: inspection.txId,
             timestamp: inspection.timestamp,
             historyCount: history.length,
-            isImmutable: history.length === 1 && inspection.locked,
-            verification: inspection.locked && history.length === 1 ? 'PASS' : 'FAIL'
+            isImmutable: history.length === 1 && isLocked,
+            verification: isLocked && history.length === 1 ? 'PASS' : 'FAIL'
         };
     }
 }

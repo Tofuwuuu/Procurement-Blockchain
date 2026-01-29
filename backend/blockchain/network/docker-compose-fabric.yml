@@ -10,7 +10,7 @@ services:
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
       - ORDERER_GENERAL_LISTENPORT=7050
       - ORDERER_GENERAL_GENESISMETHOD=file
-      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/genesis.block
       - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
       - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
       - ORDERER_GENERAL_TLS_ENABLED=true
@@ -27,7 +27,7 @@ services:
     volumes:
       - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/orderer/msp
       - ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/var/hyperledger/orderer/tls
-      - ./artifacts/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+      - ./artifacts/genesis.block:/var/hyperledger/orderer/genesis.block:ro
       - orderer_data:/var/hyperledger/production/orderer
     networks:
       - fabric
@@ -244,4 +244,5 @@ volumes:
 
 networks:
   fabric:
+    name: fabric
     driver: bridge

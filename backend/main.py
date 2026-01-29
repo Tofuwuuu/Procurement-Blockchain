@@ -998,7 +998,9 @@ async def create_inspection_report(
                     {"$set": {
                         "blockchain_tx_id": blockchain_result.get("tx_id"),
                         "blockchain_timestamp": blockchain_result.get("timestamp"),
-                        "blockchain_recorded": True
+                        "blockchain_recorded": True,
+                        # keep Mongo doc aligned with chaincode "locked" behavior
+                        "islocked": True
                     }}
                 )
                 print(f"✅ Inspection {inspection_report_id} recorded on blockchain: {blockchain_result.get('tx_id')}")
@@ -1068,7 +1070,8 @@ async def create_inspection_report(
                         {"$set": {
                             "blockchain_tx_id": blockchain_result.get("tx_id"),
                             "blockchain_timestamp": blockchain_result.get("timestamp"),
-                            "blockchain_recorded": True
+                            "blockchain_recorded": True,
+                            "islocked": True
                         }}
                     )
                     print(f"✅ Accepted inspection {inspected_id} recorded on blockchain: {blockchain_result.get('tx_id')}")
@@ -1231,6 +1234,38 @@ async def create_inspected(
             {"$set": inspected_doc},
             upsert=True
         )
+
+        # After MongoDB write, invoke chaincode so this DB event is recorded immutably.
+        # We use the inspected document _id as the blockchain inspectionId for stable mapping.
+        try:
+            inspected_record = await inspected_collection.find_one({"po_number": report.po_number})
+            inspected_id = str(inspected_record["_id"]) if inspected_record and inspected_record.get("_id") else None
+            if inspected_id:
+                blockchain_client = get_blockchain_client()
+                blockchain_result = blockchain_client.record_inspection(
+                    inspection_id=inspected_id,
+                    po_number=report.po_number,
+                    inspection_date=report.inspection_date,
+                    inspected_by=report.inspected_by,
+                    status=report.status,
+                    items=[item.dict() for item in report.items],
+                    overall_remarks=report.overall_remarks or ""
+                )
+                if blockchain_result.get("success"):
+                    await inspected_collection.update_one(
+                        {"_id": inspected_record["_id"]},
+                        {"$set": {
+                            "blockchain_tx_id": blockchain_result.get("tx_id"),
+                            "blockchain_timestamp": blockchain_result.get("timestamp"),
+                            "blockchain_recorded": True,
+                            "islocked": True
+                        }}
+                    )
+                    print(f"✅ Inspected record {inspected_id} recorded on blockchain")
+                else:
+                    print(f"⚠️ Failed to record inspected record on blockchain: {blockchain_result.get('error')}")
+        except Exception as blockchain_error:
+            print(f"⚠️ Blockchain recording error for /api/inspected: {str(blockchain_error)}")
         
         return {
             "ok": True,
@@ -2141,12 +2176,34 @@ async def verify_blockchain_inspection(
                 detail="Invalid or expired token"
             )
         
+        # If this inspected record was never synced, don't try blockchain
+        db = await get_database()
+        inspected_collection = db.inspected
+        from bson.objectid import ObjectId
+        try:
+            inspected_doc = await inspected_collection.find_one({"_id": ObjectId(inspection_id)})
+        except Exception:
+            inspected_doc = None
+
+        if inspected_doc and not inspected_doc.get("blockchain_recorded"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This record is not synced to blockchain yet. Sync it first."
+            )
+
         blockchain_client = get_blockchain_client()
         result = blockchain_client.verify_inspection(inspection_id)
         
         if result["success"]:
             return result["data"]
         else:
+            err = (result.get("error") or "").lower()
+            # Connection / timeout -> service unavailable
+            if "deadline" in err or "failed to connect" in err or "connection" in err:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Blockchain network is unreachable right now. Please try again later."
+                )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=result.get("error", "Inspection not found on blockchain")
@@ -2217,7 +2274,8 @@ async def sync_inspections_to_blockchain(
                         {"$set": {
                             "blockchain_tx_id": blockchain_result.get("tx_id"),
                             "blockchain_timestamp": blockchain_result.get("timestamp"),
-                            "blockchain_recorded": True
+                            "blockchain_recorded": True,
+                            "islocked": True
                         }}
                     )
                     synced_count += 1
