@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { initZeroCountHiding } from './utils';
+import { apiService } from './services/api';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Blockchain from './pages/Blockchain';
@@ -77,6 +78,44 @@ function App() {
     const cleanup = initZeroCountHiding();
     return cleanup;
   }, []);
+
+  // Global connection heartbeat so the backend can see which desktops are online.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    // Stable client id stored in localStorage
+    let clientId = localStorage.getItem('connectionClientId');
+    if (!clientId) {
+      clientId = `client-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+      localStorage.setItem('connectionClientId', clientId);
+    }
+
+    let cancelled = false;
+
+    const sendPing = async () => {
+      try {
+        await apiService.connectionPing(clientId!);
+      } catch (e) {
+        // Swallow errors; this is best-effort telemetry only
+        console.warn('connectionPing failed', e);
+      }
+    };
+
+    // Initial ping
+    sendPing();
+    const id = window.setInterval(() => {
+      if (!cancelled) {
+        sendPing();
+      }
+    }, 10000); // every 10 seconds
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isAuthenticated]);
 
   if (loading) {
     console.log('⏳ App is loading, showing spinner');

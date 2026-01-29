@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Col, Container, Row, Spinner, Table } from 'react-bootstrap';
-import { apiService, ConnectionsStatus, ConnectionTarget } from '../services/api';
+import { apiService, ConnectionsStatus, ConnectionTarget, ClientConnection } from '../services/api';
 
 const Connections: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -8,6 +8,7 @@ const Connections: React.FC = () => {
   const [data, setData] = useState<ConnectionsStatus | null>(null);
 
   const targets = useMemo<ConnectionTarget[]>(() => data?.targets ?? [], [data]);
+  const clients = useMemo<ClientConnection[]>(() => data?.clients ?? [], [data]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -113,6 +114,66 @@ const Connections: React.FC = () => {
                       <td>{typeof t.latency_ms === 'number' ? `${t.latency_ms} ms` : '—'}</td>
                       <td className="text-muted small">
                         {!t.connected ? (t.error || 'Unknown error') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row className="g-3 mt-3">
+        <Col md={12}>
+          <Card>
+            <Card.Header className="d-flex align-items-center justify-content-between">
+              <div className="fw-semibold">Client Connections</div>
+              <div className="text-muted small">
+                Shows browsers that have pinged this backend in the last 60 seconds.
+              </div>
+            </Card.Header>
+            <Card.Body>
+              <Table responsive hover className="mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th>Client ID</th>
+                    <th>IP</th>
+                    <th>User Agent</th>
+                    <th>Last Seen</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-muted">
+                        {loading ? 'Waiting for client pings…' : 'No recent client connections.'}
+                      </td>
+                    </tr>
+                  )}
+                  {clients.map((c) => (
+                    <tr key={c.id}>
+                      <td className="font-monospace small">{c.id}</td>
+                      <td className="font-monospace small">{c.ip}</td>
+                      <td className="small text-truncate" style={{ maxWidth: 320 }}>
+                        {c.user_agent}
+                      </td>
+                      <td className="small">
+                        {c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}
+                      </td>
+                      <td>
+                        {c.online ? (
+                          <Badge bg="success">
+                            <i className="bi bi-circle-fill me-1" />
+                            Online
+                          </Badge>
+                        ) : (
+                          <Badge bg="secondary">
+                            <i className="bi bi-circle me-1" />
+                            Offline
+                          </Badge>
+                        )}
                       </td>
                     </tr>
                   ))}

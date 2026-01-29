@@ -205,9 +205,18 @@ export interface ConnectionTarget {
   error?: string | null;
 }
 
+export interface ClientConnection {
+  id: string;
+  ip: string;
+  user_agent: string;
+  last_seen: string;
+  online: boolean;
+}
+
 export interface ConnectionsStatus {
   checked_at: string;
   targets: ConnectionTarget[];
+  clients: ClientConnection[];
 }
 
 // Procurement Types
@@ -507,6 +516,19 @@ export const apiService = {
   // ===== CONNECTIONS =====
   getConnectionsStatus: async (): Promise<ConnectionsStatus> => {
     const response = await api.get('/api/connections');
+    return response.data;
+  },
+
+  connectionPing: async (clientId: string): Promise<{
+    ok: boolean;
+    client_id: string;
+    ip: string;
+    user_agent: string;
+    timestamp: string;
+  }> => {
+    const response = await api.post('/api/connection/ping', {
+      client_id: clientId,
+    });
     return response.data;
   },
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Query
+from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from typing import List
 import socket
 import time
+
+from Connection.Connector import register_client_ping, get_active_clients
 
 # Import supplier search router
 import sys
@@ -863,9 +865,37 @@ async def get_connections_status(
             "error": r["error"],
         })
 
+    clients = get_active_clients()
+
     return {
         "checked_at": datetime.now(timezone.utc).isoformat(),
-        "targets": results
+        "targets": results,
+        "clients": clients,
+    }
+
+
+@app.post("/api/connection/ping")
+async def connection_ping(request: Request):
+    """
+    Lightweight heartbeat that frontend calls periodically.
+
+    Used to show which desktops/browsers are currently connected
+    and able to reach the backend over the network.
+    """
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    client_id = (body or {}).get("client_id") or ""
+
+    ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+
+    register_client_ping(client_id=client_id, ip=ip, user_agent=user_agent)
+
+    return {
+        "ok": True,
+        "client_id": client_id or ip,
+        "ip": ip,
+        "user_agent": user_agent,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 # ===== PENDING INSPECTIONS DATABASE =====
