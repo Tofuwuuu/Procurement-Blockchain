@@ -25,6 +25,7 @@ interface BlockchainInspection {
   blockchain_tx_id?: string;
   blockchain_timestamp?: string;
   blockchain_recorded?: boolean;
+  islocked?: boolean;
   blockchain_data?: {
     inspectionId: string;
     timestamp: string;
@@ -418,7 +419,7 @@ const Blockchain: React.FC = () => {
                 <Col md={6}>
                   <strong>Record Status:</strong>
                   <p>
-                    {selectedInspection.blockchain_data?.locked ? (
+                    {(selectedInspection.blockchain_data?.locked || selectedInspection.islocked) ? (
                       <Badge bg="success">
                         <i className="bi bi-lock-fill me-1"></i>
                         Locked (Immutable)
@@ -434,7 +435,9 @@ const Blockchain: React.FC = () => {
                 <Col md={12}>
                   <strong>Transaction ID:</strong>
                   <p className="font-monospace small">
-                    {selectedInspection.blockchain_data?.txId || selectedInspection.blockchain_tx_id || 'N/A'}
+                    {selectedInspection.blockchain_recorded 
+                      ? (selectedInspection.blockchain_tx_id || selectedInspection.blockchain_data?.txId || 'pending')
+                      : 'N/A'}
                   </p>
                 </Col>
                 {selectedInspection.overall_remarks && (

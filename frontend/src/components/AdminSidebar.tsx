@@ -166,6 +166,15 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onToggle }) => {
               <i className="bi bi-clipboard-check me-2"></i>
               Inspection
             </Nav.Link>
+            <Nav.Link 
+              as={Link} 
+              to="/connections" 
+              active={isActive('/connections')}
+              className="sidebar-item"
+            >
+              <i className="bi bi-diagram-3 me-2"></i>
+              Connections
+            </Nav.Link>
           </div>
         </Nav>
       </div>

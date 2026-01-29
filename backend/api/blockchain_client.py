@@ -164,24 +164,54 @@ class BlockchainClient:
         result = self._run_peer_command(command, org="org1")
         
         if result["success"]:
+            # After successful invoke, wait for commit, then query to get the txId
+            import time
+            tx_id = None
+            timestamp = datetime.utcnow().isoformat()
+            
+            # Retry query up to 3 times with increasing delays
+            for attempt in range(3):
+                time.sleep(2 + attempt)  # 2s, 3s, 4s delays
+                query_result = self.get_inspection(inspection_id)
+                
+                if query_result.get("success") and query_result.get("data"):
+                    stored_record = query_result["data"]
+                    tx_id = stored_record.get("txId") or stored_record.get("tx_id")
+                    # Use timestamp from blockchain if available
+                    if stored_record.get("timestamp"):
+                        timestamp = stored_record["timestamp"]
+                    if tx_id:
+                        break  # Successfully retrieved txId
+            
             return {
                 "success": True,
                 "message": "Inspection recorded on blockchain",
                 "inspection_id": inspection_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                # peer chaincode invoke output doesn't reliably include txid; treat as recorded
-                "tx_id": None,
+                "timestamp": timestamp,
+                "tx_id": tx_id,
                 "raw": result["result"]
             }
         else:
             # Idempotency: if chaincode says it's already locked, treat as success
             if self._is_already_locked_error(result.get("error") or ""):
+                # Query existing record to get txId (should be immediate since it already exists)
+                import time
+                tx_id = None
+                timestamp = datetime.utcnow().isoformat()
+                
+                query_result = self.get_inspection(inspection_id)
+                if query_result.get("success") and query_result.get("data"):
+                    stored_record = query_result["data"]
+                    tx_id = stored_record.get("txId") or stored_record.get("tx_id")
+                    if stored_record.get("timestamp"):
+                        timestamp = stored_record["timestamp"]
+                
                 return {
                     "success": True,
                     "message": "Inspection already recorded and locked on blockchain",
                     "inspection_id": inspection_id,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "tx_id": None,
+                    "timestamp": timestamp,
+                    "tx_id": tx_id,
                     "raw": result.get("error") or ""
                 }
             return {

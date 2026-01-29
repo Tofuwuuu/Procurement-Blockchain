@@ -2058,6 +2058,9 @@ async def get_blockchain_inspections(
             report_id = str(report["_id"])
             
             # Create clean dict without ObjectId to avoid serialization issues
+            islocked = report.get("islocked", False) or report.get("isLocked", False)
+            blockchain_recorded = report.get("blockchain_recorded", False)
+            
             clean_report = {
                 "id": report_id,
                 "po_number": report.get("po_number", ""),
@@ -2070,7 +2073,15 @@ async def get_blockchain_inspections(
                 "date_updated": report.get("date_updated"),
                 "blockchain_tx_id": report.get("blockchain_tx_id"),
                 "blockchain_timestamp": report.get("blockchain_timestamp"),
-                "blockchain_recorded": report.get("blockchain_recorded", False)
+                "blockchain_recorded": blockchain_recorded,
+                "islocked": islocked,
+                # Populate blockchain_data for frontend compatibility
+                "blockchain_data": {
+                    "inspectionId": report_id,
+                    "timestamp": report.get("blockchain_timestamp") or report.get("date_created", ""),
+                    "locked": islocked,
+                    "txId": report.get("blockchain_tx_id") or "pending"
+                } if blockchain_recorded else None
             }
 
             result.append(clean_report)

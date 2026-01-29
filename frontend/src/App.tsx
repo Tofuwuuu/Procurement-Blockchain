@@ -24,6 +24,7 @@ import InventoryTransferReport from './pages/InventoryTransferReport';
 import PropertyTransferReport from './pages/PropertyTransferReport';
 import PropertyReturnSlip from './pages/PropertyReturnSlip';
 import WasteMaterialsReport from './pages/WasteMaterialsReport';
+import Connections from './pages/Connections';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
 
@@ -327,6 +328,18 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Inspection />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Connections route */}
+        <Route
+          path="/connections"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Connections />
               </Layout>
             </ProtectedRoute>
           }
