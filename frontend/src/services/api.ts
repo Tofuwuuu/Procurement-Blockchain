@@ -196,6 +196,20 @@ export interface Peer {
   is_active: boolean;
 }
 
+export interface ConnectionTarget {
+  name: string;
+  host: string;
+  port: number;
+  connected: boolean;
+  latency_ms: number;
+  error?: string | null;
+}
+
+export interface ConnectionsStatus {
+  checked_at: string;
+  targets: ConnectionTarget[];
+}
+
 // Procurement Types
 export interface Supplier {
   id: number;
@@ -487,6 +501,12 @@ export const apiService = {
       port, 
       nodeId: `node-${Date.now()}` 
     });
+    return response.data;
+  },
+
+  // ===== CONNECTIONS =====
+  getConnectionsStatus: async (): Promise<ConnectionsStatus> => {
+    const response = await api.get('/api/connections');
     return response.data;
   },
 

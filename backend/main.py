@@ -17,6 +17,8 @@ from models import (
 from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
 from typing import List
+import socket
+import time
 
 # Import supplier search router
 import sys
@@ -801,6 +803,70 @@ async def test_purchase_requests_endpoint():
 @app.get("/api/test")
 async def test_endpoint():
     return {"message": "API is working correctly"}
+
+# ===== CONNECTIONS / NETWORK STATUS =====
+
+def _tcp_check(host: str, port: int, timeout_seconds: float = 1.5) -> dict:
+    """Attempt a TCP connect and measure latency."""
+    start = time.time()
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            latency_ms = int((time.time() - start) * 1000)
+            return {"ok": True, "latency_ms": latency_ms, "error": None}
+    except Exception as e:
+        latency_ms = int((time.time() - start) * 1000)
+        return {"ok": False, "latency_ms": latency_ms, "error": str(e)}
+
+
+@app.get("/api/connections")
+async def get_connections_status(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Quick connectivity status for Fabric endpoints.
+
+    This does NOT verify channel membership, just network reachability.
+    """
+    token = credentials.credentials
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    # Defaults match your docker-compose-fabric.yml
+    orderer_host = os.getenv("FABRIC_ORDERER_HOST", "orderer.example.com")
+    orderer_port = int(os.getenv("FABRIC_ORDERER_PORT", "7050"))
+
+    peer0_host = os.getenv("FABRIC_PEER0_HOST", "peer0.org1.example.com")
+    peer0_port = int(os.getenv("FABRIC_PEER0_PORT", "7051"))
+
+    peer1_host = os.getenv("FABRIC_PEER1_HOST", "peer1.org1.example.com")
+    peer1_port = int(os.getenv("FABRIC_PEER1_PORT", "8051"))
+
+    checks = [
+        {"name": "orderer", "host": orderer_host, "port": orderer_port},
+        {"name": "peer0", "host": peer0_host, "port": peer0_port},
+        {"name": "peer1", "host": peer1_host, "port": peer1_port},
+    ]
+
+    results = []
+    for c in checks:
+        r = _tcp_check(c["host"], c["port"])
+        results.append({
+            "name": c["name"],
+            "host": c["host"],
+            "port": c["port"],
+            "connected": r["ok"],
+            "latency_ms": r["latency_ms"],
+            "error": r["error"],
+        })
+
+    return {
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "targets": results
+    }
 
 # ===== PENDING INSPECTIONS DATABASE =====
 
