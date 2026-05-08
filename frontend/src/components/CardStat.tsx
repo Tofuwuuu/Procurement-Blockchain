@@ -7,6 +7,7 @@ interface CardStatProps {
   icon: string;
   variant?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
   className?: string;
+  helperText?: string;
 }
 
 const CardStat: React.FC<CardStatProps> = ({ 
@@ -14,32 +15,23 @@ const CardStat: React.FC<CardStatProps> = ({
   value, 
   icon, 
   variant = 'primary',
-  className = ''
+  className = '',
+  helperText
 }) => {
   const getVariantClasses = () => {
-    switch (variant) {
-      case 'success':
-        return 'text-bg-success';
-      case 'warning':
-        return 'text-bg-warning';
-      case 'danger':
-        return 'text-bg-danger';
-      case 'info':
-        return 'text-bg-info';
-      default:
-        return 'text-bg-primary';
-    }
+    return `stat-card-modern stat-card-${variant}`;
   };
 
   return (
     <Card className={`${getVariantClasses()} ${className}`}>
       <Card.Body>
-        <div className="d-flex justify-content-between align-items-center">
-          <div>
-            <div className="fs-5 fw-medium">{title}</div>
-            <div className="display-6 fw-bold">{value.toLocaleString()}</div>
+        <div className="stat-card-content">
+          <div className="stat-copy">
+            <div className="stat-title">{title}</div>
+            <div className="stat-value">{value.toLocaleString()}</div>
+            {helperText && <div className="stat-helper">{helperText}</div>}
           </div>
-          <div className="opacity-50" style={{ fontSize: '2rem' }}>
+          <div className="stat-icon" aria-hidden="true">
             <i className={`bi ${icon}`}></i>
           </div>
         </div>

@@ -5,13 +5,32 @@
   --cvsu-medium-green: #4caf50;
   --cvsu-gold: #ffd700;
   --cvsu-accent: #1b5e20;
+  --surface-green: #f7fbf8;
+  --border-green: #dce7df;
 }
 
 /* Navbar Styling with Green Theme */
+.app-shell {
+  background: #f8faf9;
+}
+
+.app-main {
+  background:
+    linear-gradient(180deg, rgba(234, 246, 237, 0.65), rgba(255, 255, 255, 0.88) 360px),
+    #f8faf9;
+}
+
+.site-header {
+  background-color: #1b5e20 !important;
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+}
+
 .ph-header {
   background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%) !important;
-  box-shadow: 0 2px 8px rgba(27, 94, 32, 0.2);
-  padding: 0.75rem 0 !important;
+  box-shadow: 0 8px 24px rgba(15, 61, 24, 0.18);
+  padding: 0.58rem 0 !important;
 }
 
 header {
@@ -25,8 +44,8 @@ header .navbar {
 
 .ph-header .navbar-brand {
   font-weight: 700;
-  font-size: 1.4rem;
-  letter-spacing: 0.5px;
+  font-size: 1.12rem;
+  letter-spacing: 0;
   color: #fff !important;
 }
 
@@ -35,20 +54,19 @@ header .navbar {
   font-weight: 500;
   transition: all 0.25s ease;
   position: relative;
-  padding: 0.5rem 0.75rem !important;
+  padding: 0.58rem 0.8rem !important;
   margin: 0 0.25rem;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .ph-header .nav-link:hover {
-  color: #4caf50 !important;
-  background-color: rgba(76, 175, 80, 0.1);
+  color: #fff !important;
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .ph-header .nav-link.active {
-  color: #4caf50 !important;
-  background-color: rgba(76, 175, 80, 0.15);
-  border-bottom: 2px solid #4caf50;
+  color: #fff !important;
+  background-color: rgba(255, 255, 255, 0.18);
 }
 
 /* Dropdown styling */
@@ -61,10 +79,10 @@ header .navbar {
 }
 
 .ph-header .dropdown-menu {
-  background-color: #f8f9fa;
+  background-color: #fff;
   border: 1px solid rgba(27, 94, 32, 0.15);
-  box-shadow: 0 8px 24px rgba(27, 94, 32, 0.15);
-  border-radius: 6px;
+  box-shadow: 0 18px 38px rgba(27, 94, 32, 0.15);
+  border-radius: 8px;
   margin-top: 0.5rem;
 }
 
@@ -75,7 +93,7 @@ header .navbar {
 }
 
 .ph-header .dropdown-item:hover {
-  background-color: rgba(27, 94, 32, 0.05);
+  background-color: #eaf6ed;
   color: #1b5e20;
 }
 
@@ -87,8 +105,8 @@ header .navbar {
 
 /* Badge styling */
 .admin-badge {
-  background-color: #4caf50 !important;
-  color: #fff !important;
+  background-color: #fcd116 !important;
+  color: #0f3d18 !important;
   font-weight: 700;
   padding: 0.35rem 0.65rem;
 }
@@ -108,10 +126,10 @@ header .navbar {
 }
 
 .user-dropdown-menu {
-  background-color: #f8f9fa;
+  background-color: #fff;
   border: 1px solid rgba(27, 94, 32, 0.15);
   box-shadow: 0 8px 24px rgba(27, 94, 32, 0.15);
-  border-radius: 6px;
+  border-radius: 8px;
   margin-top: 0.5rem;
 }
 
@@ -127,14 +145,16 @@ header .navbar {
 
 /* Footer styling */
 footer {
-  background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
-  border-top: 2px solid #1b5e20;
+  background: #fff;
+  border-top: 1px solid var(--border-green);
+  color: #314238;
 }
 
 footer h5 {
   color: #1b5e20;
   font-weight: 700;
-  margin-bottom: 1rem;
+  font-size: 0.98rem;
+  margin-bottom: 0.8rem;
 }
 
 footer a {
@@ -145,6 +165,10 @@ footer a {
 footer a:hover {
   color: #4caf50 !important;
   text-decoration: underline !important;
+}
+
+.footer-link-text {
+  color: #1b5e20;
 }
 
 /* Responsive adjustments */

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Navbar, Nav, Container, Dropdown, Badge, NavDropdown } from 'react-bootstrap';
+import { Navbar, Nav, Container, Dropdown, Badge } from 'react-bootstrap';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { initZeroCountHiding } from '../utils';
@@ -35,16 +35,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   return (
-    <div className="d-flex flex-column min-vh-100">
+    <div className="app-shell d-flex flex-column min-vh-100">
       {/* Admin Sidebar */}
       {user?.is_admin && (
         <AdminSidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       )}
       
       {/* Header */}
-      <header role="banner" style={{ backgroundColor: '#1b5e20' }}>
+      <header role="banner" className="site-header">
         <Navbar 
-          style={{ backgroundColor: '#1b5e20' }}
           variant="dark" 
           expand="lg" 
           className="ph-header"
@@ -55,7 +54,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <img 
                 src={logo} 
                 alt="PAMS" 
-                height="40" 
+                height="34" 
                 className="me-3"
               />
               <span className="fw-bold fs-5">PAMS</span>
@@ -532,12 +531,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </header>
 
       {/* Main Content */}
-      <main role="main" className="flex-grow-1">
+      <main role="main" className="app-main flex-grow-1">
         {children}
       </main>
 
       {/* Footer */}
-      <footer role="contentinfo" className="bg-light py-4 mt-auto">
+      <footer role="contentinfo" className="site-footer py-4 mt-auto">
         <Container>
           <div className="row">
             <div className="col-md-4">
@@ -548,8 +547,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             <div className="col-md-4">
               <h5>Legal Compliance</h5>
               <ul className="list-unstyled">
-                <li><a href="#" className="text-decoration-none">Philippine Procurement Law</a></li>
-                <li><a href="#" className="text-decoration-none">BIR Regulations</a></li>
+                <li><span className="footer-link-text">Philippine Procurement Law</span></li>
+                <li><span className="footer-link-text">BIR Regulations</span></li>
               </ul>
             </div>
             <div className="col-md-4">

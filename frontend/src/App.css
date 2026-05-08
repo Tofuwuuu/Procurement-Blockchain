@@ -2,25 +2,33 @@
 
 /* ===== PHILIPPINE THEME COLORS ===== */
 :root {
-  --ph-blue: #0038A8;
-  --ph-red: #CE1126;
+  --ph-blue: #1b5e20;
+  --ph-red: #2e7d32;
   --ph-yellow: #FCD116;
   --ph-white: #FFFFFF;
-  --ph-light-blue: #E6F3FF;
-  --ph-light-red: #FFE6E9;
+  --ph-light-blue: #EAF6ED;
+  --ph-light-red: #EEF8F0;
   --ph-light-yellow: #FFF8E1;
-  --ph-dark-blue: #002366;
-  --ph-dark-red: #A00000;
+  --ph-dark-blue: #0F3D18;
+  --ph-dark-red: #14532D;
   --ph-gray: #6C757D;
-  --ph-light-gray: #F8F9FA;
-  --ph-border: #DEE2E6;
+  --ph-light-gray: #F7FAF8;
+  --ph-border: #DCE7DF;
+  --green-900: #0F3D18;
+  --green-800: #14532D;
+  --green-700: #1B5E20;
+  --green-600: #2E7D32;
+  --green-100: #EAF6ED;
+  --green-50: #F7FBF8;
 }
 
 /* ===== GLOBAL STYLES ===== */
 .App {
   text-align: left;
   min-height: 100vh;
-  background: linear-gradient(135deg, rgba(0,56,168,0.02) 0%, rgba(206,17,38,0.02) 100%);
+  background:
+    linear-gradient(180deg, rgba(234, 246, 237, 0.66) 0%, rgba(255, 255, 255, 0.9) 44%),
+    #f8faf9;
   font-family: 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -29,11 +37,11 @@
 
 /* ===== ENHANCED PHILIPPINE HEADER STYLES ===== */
 .ph-header {
-  background: linear-gradient(135deg, var(--ph-blue) 0%, var(--ph-dark-blue) 100%) !important;
-  border-bottom: 3px solid var(--ph-red);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(90deg, var(--green-900) 0%, var(--green-700) 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 24px rgba(15, 61, 24, 0.18);
   padding: 0.5rem 0;
-  min-height: 70px;
+  min-height: 64px;
 }
 
 .ph-header .navbar-brand {
@@ -60,57 +68,39 @@
 /* Enhanced Navigation Items */
 .nav-item-custom {
   color: rgba(255, 255, 255, 0.9) !important;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  font-weight: 700;
+  transition: background-color 0.2s ease, color 0.2s ease;
   border-radius: 8px;
   margin: 0 4px;
-  padding: 0.75rem 1rem !important;
+  padding: 0.62rem 0.85rem !important;
   position: relative;
-  overflow: hidden;
-}
-
-.nav-item-custom::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-  transition: left 0.5s ease;
-}
-
-.nav-item-custom:hover::before {
-  left: 100%;
 }
 
 .nav-item-custom:hover,
 .nav-item-custom.active {
   color: var(--ph-white) !important;
-  background-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  background-color: rgba(255, 255, 255, 0.13);
 }
 
 .nav-item-custom.active {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  background: rgba(255, 255, 255, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* Enhanced Dropdown Styles */
 .dropdown-menu-custom {
-  background: linear-gradient(135deg, var(--ph-white) 0%, var(--ph-light-gray) 100%);
-  border: none;
-  border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  background: var(--ph-white);
+  border: 1px solid rgba(20, 83, 45, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(15, 61, 24, 0.14);
   padding: 0.5rem 0;
   margin-top: 0.5rem;
   min-width: 220px;
 }
 
 .dropdown-item-custom {
-  color: var(--ph-gray);
-  font-weight: 500;
+  color: #24362b;
+  font-weight: 700;
   padding: 0.75rem 1.5rem;
   transition: all 0.3s ease;
   border-radius: 0;
@@ -118,10 +108,8 @@
 }
 
 .dropdown-item-custom:hover {
-  background: linear-gradient(135deg, var(--ph-light-blue) 0%, var(--ph-white) 100%);
-  color: var(--ph-blue);
-  transform: translateX(5px);
-  box-shadow: 0 2px 10px rgba(0, 56, 168, 0.1);
+  background: var(--green-100);
+  color: var(--green-700);
 }
 
 .dropdown-item-custom:active {
@@ -133,7 +121,7 @@
 .user-dropdown-toggle {
   background: rgba(255, 255, 255, 0.1) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  border-radius: 25px !important;
+  border-radius: 999px !important;
   padding: 0.5rem 1rem !important;
   transition: all 0.3s ease;
 }
@@ -141,8 +129,6 @@
 .user-dropdown-toggle:hover {
   background: rgba(255, 255, 255, 0.2) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .user-dropdown-menu {
@@ -169,15 +155,14 @@
 }
 
 .badge:hover {
-  transform: scale(1.05);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 /* ===== COMPONENT STYLES ===== */
 .card {
   border: none;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
   transition: all 0.3s ease;
 }
 
@@ -189,7 +174,7 @@
 .card-header {
   background: linear-gradient(135deg, var(--ph-blue) 0%, var(--ph-dark-blue) 100%);
   color: var(--ph-white);
-  border-radius: 12px 12px 0 0 !important;
+  border-radius: 8px 8px 0 0 !important;
   border: none;
 }
 
@@ -218,7 +203,7 @@
 
 .form-control:focus {
   border-color: var(--ph-blue);
-  box-shadow: 0 0 0 0.2rem rgba(0, 56, 168, 0.25);
+  box-shadow: 0 0 0 0.2rem rgba(27, 94, 32, 0.18);
 }
 
 .btn {
@@ -234,7 +219,19 @@
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(0, 56, 168, 0.4);
+  box-shadow: 0 4px 15px rgba(27, 94, 32, 0.28);
+}
+
+.btn-outline-primary {
+  border-color: var(--green-600);
+  color: var(--green-700);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+  background: var(--green-700);
+  border-color: var(--green-700);
+  color: #fff;
 }
 
 /* ===== RESPONSIVE DESIGN ===== */
