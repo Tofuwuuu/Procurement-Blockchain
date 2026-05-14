@@ -97,77 +97,13 @@ const OrderDetail: React.FC = () => {
         };
         setOrder(mapped);
       } else {
-        // Admin/other roles: Try real purchase order API, fallback to mock
-        let orderData: PurchaseOrder;
-        try {
-          orderData = await apiService.getOrder(parseInt(id!));
-        } catch (apiError) {
-          console.log('API not available, using mock data...');
-          orderData = {
-            id: parseInt(id!),
-            po_number: `PO-20250101-${id!.padStart(3, '0')}`,
-            supplier_id: 1,
-            supplier: {
-              id: 1,
-              name: "TechDistributors Inc",
-              address: "123 Tech Street, Makati City",
-              province: "Metro Manila",
-              contact_person: "John Smith",
-              phone: "+63 2 1234 5678",
-              email: "john@techdistributors.com",
-              bir_tin: "123-456-789-000",
-              is_active: true,
-              created_at: "2025-01-01T00:00:00Z",
-              updated_at: "2025-01-01T00:00:00Z"
-            },
-            delivery_address: "Philippine Procurement Solutions, 123 Ayala Avenue, Makati City",
-            notes: "Urgent delivery required",
-            status: "Pending",
-            total_amount: 75000.00,
-            date_created: "2025-01-01T10:30:00Z",
-            date_updated: "2025-01-01T10:30:00Z",
-            items: [
-              {
-                id: 1,
-                product_id: 1,
-                product: {
-                  id: 1,
-                  name: "Laptop Computer",
-                  description: "High-performance laptop for office use",
-                  unit: "piece",
-                  unit_price: 45000.00,
-                  category: "Electronics",
-                  is_active: true
-                },
-                quantity: 1,
-                unit_price: 45000.00,
-                total_price: 45000.00
-              },
-              {
-                id: 2,
-                product_id: 2,
-                product: {
-                  id: 2,
-                  name: "Office Chair",
-                  description: "Ergonomic office chair",
-                  unit: "piece",
-                  unit_price: 15000.00,
-                  category: "Furniture",
-                  is_active: true
-                },
-                quantity: 2,
-                unit_price: 15000.00,
-                total_price: 30000.00
-              }
-            ]
-          };
-        }
+        const orderData = await apiService.getOrder(parseInt(id!));
         setOrder(orderData);
       }
     } catch (err) {
       console.error('Error fetching order details:', err);
-      setError('Failed to load order details');
-      setToastMessage('Failed to load order details');
+      setError('Purchase order details are coming soon. The backend endpoint is not available yet.');
+      setToastMessage('Purchase order details are coming soon. The backend endpoint is not available yet.');
       setToastType('error');
       setShowToast(true);
     } finally {

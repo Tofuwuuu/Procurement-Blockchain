@@ -10,7 +10,7 @@ from auth import decode_access_token
 security = HTTPBearer()
 
 async def require_canvasser(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Require canvasser role for access"""
+    """Require canvasser or admin role for access."""
     token = credentials.credentials
     payload = decode_access_token(token)
     
@@ -21,10 +21,11 @@ async def require_canvasser(credentials: HTTPAuthorizationCredentials = Depends(
         )
     
     role = payload.get("role", "").lower()
-    if role != "canvasser":
+    is_admin = bool(payload.get("is_admin", False))
+    if role not in {"canvasser", "admin"} and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Canvasser role required."
+            detail="Access denied. Canvasser or Admin role required."
         )
     
     return payload

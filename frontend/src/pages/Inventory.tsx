@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Container, Row, Col, Card, Table, Button, Badge, 
-  Form, Modal, Alert, Spinner, InputGroup 
+  Form, Modal, Alert, InputGroup 
 } from 'react-bootstrap';
 import { apiService, Inventory as InventoryItem, Product } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 
@@ -274,11 +273,12 @@ const mockInventory: InventoryItem[] = [
     }
   }
 ];
+void mockProducts;
+void mockInventory;
 
 const Inventory: React.FC = () => {
-  const { user } = useAuth();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -336,22 +336,22 @@ const Inventory: React.FC = () => {
         setProducts(productsData);
         setUsingMockData(false);
       } catch (apiError) {
-        console.log('API not available, using realistic inventory data...');
-        // Use realistic mock data if API fails
-        setInventory(mockInventory);
-        setProducts(mockProducts);
-        setUsingMockData(true);
-        
-                 // No toast notification needed
+        console.error('Inventory endpoint is not available:', apiError);
+        setInventory([]);
+        setProducts([]);
+        setUsingMockData(false);
+        setToastMessage('Inventory management is coming soon. The backend endpoint is not available yet.');
+        setToastType('info');
+        setShowToast(true);
       }
     } catch (error) {
       console.error('Failed to fetch inventory data:', error);
-      // Fallback to mock data
-      setInventory(mockInventory);
-      setProducts(mockProducts);
-      setUsingMockData(true);
-      
-             // No toast notification needed
+      setInventory([]);
+      setProducts([]);
+      setUsingMockData(false);
+      setToastMessage('Inventory management is coming soon. The backend endpoint is not available yet.');
+      setToastType('info');
+      setShowToast(true);
     } finally {
       setLoading(false);
     }
@@ -379,29 +379,10 @@ const Inventory: React.FC = () => {
 
     try {
       if (usingMockData) {
-        // Simulate inventory adjustment for mock data
-        const updatedInventory = inventory.map(item => {
-          if (item.product_id === adjustmentData.product_id) {
-            const newQuantity = item.quantity + adjustmentData.adjustment;
-            if (newQuantity < 0) {
-              throw new Error('Insufficient stock for this adjustment');
-            }
-            return {
-              ...item,
-              quantity: newQuantity,
-              total_value: newQuantity * item.unit_price,
-              last_updated: new Date().toISOString()
-            };
-          }
-          return item;
-        });
-        
-        setInventory(updatedInventory);
-        setToastMessage('Inventory adjusted successfully (Demo)');
-        setToastType('success');
+        setToastMessage('Inventory adjustments are coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
         setShowToast(true);
-        setShowAdjustModal(false);
-        resetForm();
+        return;
       } else {
         await apiService.adjustInventory(adjustmentData);
         setToastMessage('Inventory adjusted successfully');
@@ -489,12 +470,6 @@ const Inventory: React.FC = () => {
             <div>
               <div className="d-flex align-items-center gap-2 mb-1">
                 <h1 className="h2 mb-0">Inventory Management</h1>
-                {usingMockData && (
-                  <Badge bg="info" className="fs-6">
-                    <i className="bi bi-info-circle me-1"></i>
-                    Demo Mode
-                  </Badge>
-                )}
               </div>
               <p className="text-muted mb-0">
                 Track stock levels and manage inventory adjustments

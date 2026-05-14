@@ -223,11 +223,8 @@ const Inspection: React.FC = () => {
         status: inspectionReport.status
       };
 
-      // Create inspection report
-      const createdReport = await apiService.createInspectionReport(reportData);
-      
-      // Save to Inspected collection
-      await apiService.createInspected(reportData);
+      // The backend creates the accepted inspected record automatically.
+      await apiService.createInspectionReport(reportData);
       
       // Mark as inspected
       setInspectedPOs(prev => {
@@ -236,7 +233,7 @@ const Inspection: React.FC = () => {
         return newSet;
       });
       
-      let message = 'Inspection and Acceptance Report created successfully and saved to Inspected collection';
+      let message = 'Inspection and Acceptance Report created successfully';
       
       // If status is "Accepted", custodian slip is automatically created by backend
       if (inspectionReport.status === 'Accepted') {

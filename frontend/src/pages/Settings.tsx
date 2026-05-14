@@ -57,23 +57,9 @@ const Settings: React.FC = () => {
           maintenance_mode: settings.maintenance_mode,
         });
       } catch (error) {
-        console.log('System settings not available, using defaults');
-        // Set default values
-        setSystemForm({
-          company_name: 'Philippine Procurement Solutions',
-          company_address: '123 Ayala Avenue, Makati City, Philippines',
-          company_phone: '+63 2 1234 5678',
-          company_email: 'procurement@example.com',
-          bir_tin: '123-456-789-000',
-          system_language: 'en',
-          timezone: 'Asia/Manila',
-          currency: 'PHP',
-          date_format: 'MM/DD/YYYY',
-          notifications_enabled: true,
-          email_notifications: true,
-          audit_logging: true,
-          maintenance_mode: false,
-        });
+        console.error('System settings endpoint is not available:', error);
+        setSystemSettings(null);
+        setSystemForm({});
       }
 
       // Load user preferences
@@ -89,15 +75,9 @@ const Settings: React.FC = () => {
           dashboard_layout: preferences.dashboard_layout,
         });
       } catch (error) {
-        console.log('User preferences not available, using defaults');
-        setPreferencesForm({
-          language: 'en',
-          theme: 'light',
-          email_notifications: true,
-          order_updates: true,
-          system_alerts: true,
-          dashboard_layout: 'default',
-        });
+        console.error('User preferences endpoint is not available:', error);
+        setUserPreferences(null);
+        setPreferencesForm({});
       }
 
       // Load system info
@@ -105,14 +85,8 @@ const Settings: React.FC = () => {
         const info = await apiService.getSystemInfo();
         setSystemInfo(info);
       } catch (error) {
-        console.log('System info not available');
-        setSystemInfo({
-          version: '1.0.0',
-          environment: 'development',
-          database: 'SQLite',
-          uptime: 0,
-          last_backup: 'Never',
-        });
+        console.error('System info endpoint is not available:', error);
+        setSystemInfo(null);
       }
 
 
@@ -225,6 +199,13 @@ const Settings: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {!systemSettings && !userPreferences && !systemInfo && (
+        <Alert variant="info" className="mb-4">
+          <i className="bi bi-info-circle me-2"></i>
+          Settings management is coming soon. The backend settings endpoints are not available yet.
+        </Alert>
+      )}
 
       <Row>
         {/* System Settings */}
@@ -375,7 +356,7 @@ const Settings: React.FC = () => {
                   <Button 
                     variant="primary" 
                     onClick={handleSystemSettingsSave}
-                    disabled={saving}
+                    disabled={saving || !systemSettings}
                   >
                     {saving ? (
                       <>
@@ -486,7 +467,7 @@ const Settings: React.FC = () => {
                   <Button 
                     variant="primary" 
                     onClick={handlePreferencesSave}
-                    disabled={saving}
+                    disabled={saving || !userPreferences}
                   >
                     {saving ? (
                       <>

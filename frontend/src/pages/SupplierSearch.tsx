@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Button, Table, InputGroup, Modal } from 'react-bootstrap';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Container, Row, Col, Card, Form, Button, Table, InputGroup, Modal, Badge } from 'react-bootstrap';
 import { apiService, PurchaseRequest } from '../services/api';
 import Toast from '../components/Toast';
 import LoadingSpinner from '../components/LoadingSpinner';
+import './SupplierSearch.css';
 
 interface SearchResult {
   id?: string;
@@ -20,7 +20,6 @@ interface ApprovedPurchaseRequestRow extends PurchaseRequest {
 }
 
 const SupplierSearch: React.FC = () => {
-  const { user } = useAuth();
   const [urls, setUrls] = useState<string[]>([
     'https://en.wikipedia.org/wiki/Laptop',
     'https://en.wikipedia.org/wiki/Computer_monitor',
@@ -29,7 +28,7 @@ const SupplierSearch: React.FC = () => {
     'https://www.procurementone.ph/'
   ]);
   const [newUrl, setNewUrl] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData] = useState({
     stockPropertyNo: '',
     unit: '',
     itemDescription: '',
@@ -37,12 +36,7 @@ const SupplierSearch: React.FC = () => {
     unitCost: ''
   });
   const [approvedPRs, setApprovedPRs] = useState<ApprovedPurchaseRequestRow[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([
-    { no: 1, category: 'Computer', itemDescription: 'Brand X Printer', unitPrice: 4700.00, supplierName: 'Company Name 1', selected: true },
-    { no: 2, category: 'Computer', itemDescription: 'Brand Y Printer', unitPrice: 4899.00, supplierName: 'Company Name 2', selected: false },
-    { no: 3, category: 'Computer', itemDescription: 'Epson Printer', unitPrice: 5000.00, supplierName: 'Company Name 3', selected: false },
-    { no: 4, category: 'Computer', itemDescription: 'Brand Z Printer', unitPrice: 14299.00, supplierName: 'Company Name 4', selected: true },
-  ]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [showToast, setShowToast] = useState(false);
@@ -77,7 +71,10 @@ const SupplierSearch: React.FC = () => {
       setSearchResults(formattedResults);
     } catch (error: any) {
       console.error('Failed to load saved results:', error);
-      // Keep mock data if API fails
+      setSearchResults([]);
+      setToastMessage('Supplier search results are not available yet.');
+      setToastType('info');
+      setShowToast(true);
     } finally {
       setLoadingResults(false);
     }
@@ -114,10 +111,6 @@ const SupplierSearch: React.FC = () => {
     const newUrls = [...urls];
     newUrls[index] = value;
     setUrls(newUrls);
-  };
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
   };
 
   const handleSearch = async () => {
@@ -193,13 +186,17 @@ const SupplierSearch: React.FC = () => {
   };
 
   const handleSelectAll = (checked: boolean) => {
-    setSearchResults(results => results.map(r => ({ ...r, selected: checked })));
+    const visibleKeys = new Set(filteredResults.map((result) => result.id || String(result.no)));
+    setSearchResults(results =>
+      results.map(r => (visibleKeys.has(r.id || String(r.no)) ? { ...r, selected: checked } : r))
+    );
   };
 
-  const handleSelectRow = (index: number) => {
-    const newResults = [...searchResults];
-    newResults[index].selected = !newResults[index].selected;
-    setSearchResults(newResults);
+  const handleSelectRow = (result: SearchResult) => {
+    const key = result.id || String(result.no);
+    setSearchResults(results =>
+      results.map(r => ((r.id || String(r.no)) === key ? { ...r, selected: !r.selected } : r))
+    );
   };
 
   const handleAddSelected = () => {
@@ -267,10 +264,14 @@ const SupplierSearch: React.FC = () => {
     }).format(amount);
   };
 
-  const filteredResults = searchResults.filter(result =>
-    result.itemDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.category.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredResults = useMemo(
+    () =>
+      searchResults.filter(result =>
+        result.itemDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        result.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        result.category.toLowerCase().includes(searchTerm.toLowerCase())
+      ),
+    [searchResults, searchTerm]
   );
 
   // Pagination logic - 10 items per page
@@ -280,54 +281,68 @@ const SupplierSearch: React.FC = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedResults = filteredResults.slice(startIndex, endIndex);
 
-  const allSelected = searchResults.length > 0 && searchResults.every(r => r.selected);
+  const selectedCount = searchResults.filter(r => r.selected).length;
+  const selectedPRCount = approvedPRs.filter(pr => pr.selected).length;
+  const allVisibleSelected = filteredResults.length > 0 && filteredResults.every(r => r.selected);
 
   return (
-    <Container fluid className="py-4">
-      <Row>
-        <Col>
-          <h2 className="mb-4">Supplier Search</h2>
-          <div className="alert alert-info mb-4" role="alert">
-            <i className="bi bi-info-circle"></i>
-            <strong> Reference Data Notice:</strong> When searching suppliers without a URL, the system automatically 
-            extracts item descriptions from checked purchase requests and searches for suppliers based on those keywords. 
-            Retrieved supplier information is presented as reference only and requires manual validation before final selection.
-          </div>
-        </Col>
-      </Row>
+    <Container fluid className="supplier-search-page py-4">
+      <div className="supplier-page-header">
+        <div>
+          <div className="supplier-eyebrow">Procurement Sourcing</div>
+          <h2 className="mb-1">Supplier Search</h2>
+          <p className="supplier-page-subtitle mb-0">
+            Search supplier references from approved purchase requests or trusted URLs, then attach selected suppliers to canvass.
+          </p>
+        </div>
+        <div className="supplier-header-actions">
+          <Badge className="supplier-soft-badge">{approvedPRs.length} approved PRs</Badge>
+          <Badge className="supplier-soft-badge selected">{selectedCount} selected suppliers</Badge>
+        </div>
+      </div>
 
-      <Row>
-        <Col md={4}>
-          <Card className="mb-3">
-            <Card.Header>
-              <div className="d-flex justify-content-between align-items-center">
-                <Form.Label className="fw-semibold mb-0">URL</Form.Label>
-                <Button variant="primary" size="sm" onClick={handleAddUrl}>
-                  Add
-                </Button>
-              </div>
-            </Card.Header>
+      <div className="supplier-notice" role="alert">
+        <i className="bi bi-info-circle"></i>
+        <span>Supplier data is reference material. Validate pricing, availability, and eligibility before final selection.</span>
+      </div>
+
+      <Row className="g-3">
+        <Col lg={4} xl={3}>
+          <Card className="supplier-search-card">
             <Card.Body>
-              {urls.map((url, index) => (
-                <InputGroup key={index} className="mb-2">
+              <div className="supplier-panel-heading">
+                <div>
+                  <h5>Search Sources</h5>
+                  <span>Use URLs, approved PRs, or both.</span>
+                </div>
+              </div>
+              <div className="supplier-section-title">
+                <i className="bi bi-link-45deg"></i>
+                URL Sources
+              </div>
+              <div className="supplier-url-list">
+                {urls.map((url, index) => (
+                <InputGroup key={index} className="supplier-url-row">
                   <Form.Control
                     value={url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="www.example.com/"
+                    placeholder="https://supplier.example.com"
                   />
-                  <Button variant="outline-danger" onClick={() => handleRemoveUrl(index)}>
-                    <i className="bi bi-x"></i>
+                  <Button variant="outline-danger" onClick={() => handleRemoveUrl(index)} aria-label="Remove URL">
+                    <i className="bi bi-x-lg"></i>
                   </Button>
                 </InputGroup>
-              ))}
-              <InputGroup>
+                ))}
+              </div>
+              <InputGroup className="supplier-add-url">
                 <Form.Control
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="www.example.com/"
+                  placeholder="Add supplier or reference URL"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
                 />
                 <Button variant="primary" onClick={handleAddUrl}>
+                  <i className="bi bi-plus-lg me-1"></i>
                   Add
                 </Button>
               </InputGroup>
@@ -345,16 +360,17 @@ const SupplierSearch: React.FC = () => {
                     <i className="bi bi-arrow-clockwise"></i>
                   </Button>
                 </div>
-                <div className="text-muted small mb-2">
-                  <i className="bi bi-info-circle"></i> Check items to automatically search suppliers based on their descriptions
+                <div className="supplier-helper-text">
+                  <i className="bi bi-info-circle"></i> Check items to search by their descriptions.
+                  {selectedPRCount > 0 && ` ${selectedPRCount} selected.`}
                 </div>
-                <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: 4, padding: 8 }}>
+                <div className="supplier-pr-list">
                   {loadingApprovedPRs ? (
-                    <div className="text-center py-2">
+                    <div className="supplier-loading-inline">
                       <LoadingSpinner size="sm" text="Loading..." />
                     </div>
                   ) : approvedPRs.length === 0 ? (
-                    <div className="text-muted">No approved purchase requests</div>
+                    <div className="supplier-empty-mini">No approved purchase requests</div>
                   ) : (
                     approvedPRs.map((pr) => (
                       <Form.Check
@@ -378,7 +394,7 @@ const SupplierSearch: React.FC = () => {
                 <Button 
                   variant="success" 
                   size="lg" 
-                  className="w-100"
+                  className="supplier-search-button"
                   onClick={handleSearch} 
                   disabled={loading}
                 >
@@ -390,7 +406,7 @@ const SupplierSearch: React.FC = () => {
                   ) : (
                     <>
                       <i className="bi bi-search me-2"></i>
-                      Search
+                      Search Suppliers
                     </>
                   )}
                 </Button>
@@ -399,25 +415,29 @@ const SupplierSearch: React.FC = () => {
           </Card>
         </Col>
 
-        <Col md={8}>
-          <Card>
-            <Card.Header>
-              <div className="d-flex justify-content-between align-items-center">
-                <h5 className="mb-0">Results</h5>
-              </div>
-            </Card.Header>
-            <Card.Body>
+        <Col lg={8} xl={9}>
+          <Card className="supplier-results-card">
+            <Card.Body className="p-0">
+              <div className="supplier-results-toolbar">
+                <div>
+                  <h5>Supplier Results</h5>
+                  <span>{filteredResults.length} results shown, {selectedCount} selected</span>
+                </div>
               {/* Search Bar */}
-              <InputGroup className="mb-3">
+              <InputGroup className="supplier-results-search">
                 <InputGroup.Text>
                   <i className="bi bi-search"></i>
                 </InputGroup.Text>
                 <Form.Control
-                  placeholder="Search..."
+                  placeholder="Filter supplier, category, or item..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
                 />
               </InputGroup>
+              </div>
 
               {loadingResults && (
                 <div className="text-center py-4">
@@ -428,32 +448,28 @@ const SupplierSearch: React.FC = () => {
               {/* Results Table */}
               {!loadingResults && (
               <div className="table-responsive">
-                <Table striped bordered hover>
+                <Table hover className="supplier-results-table mb-0">
                   <thead>
                     <tr>
                       <th style={{ width: '5%' }}>No.</th>
                       <th style={{ width: '15%' }}>
                         Category
-                        <i className="bi bi-arrow-up-down ms-2"></i>
                       </th>
                       <th style={{ width: '30%' }}>
                         Item Description
-                        <i className="bi bi-arrow-up-down ms-2"></i>
                       </th>
                       <th style={{ width: '15%' }}>
                         Unit Price
-                        <i className="bi bi-arrow-up-down ms-2"></i>
                       </th>
                       <th style={{ width: '20%' }}>
                         Supplier Name
-                        <i className="bi bi-arrow-up-down ms-2"></i>
                       </th>
                       <th style={{ width: '15%' }}>
                         <Form.Check
                           type="checkbox"
-                          checked={allSelected}
+                          checked={allVisibleSelected}
                           onChange={(e) => handleSelectAll(e.target.checked)}
-                          label="Select All"
+                          label="Select visible"
                           className="mb-0"
                         />
                       </th>
@@ -462,23 +478,25 @@ const SupplierSearch: React.FC = () => {
                   <tbody>
                     {paginatedResults.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
-                          No results found
+                        <td colSpan={6} className="supplier-empty-state">
+                          <i className="bi bi-search"></i>
+                          <strong>No supplier results found</strong>
+                          <span>Try another URL, approved PR, or result filter.</span>
                         </td>
                       </tr>
                     ) : (
-                      paginatedResults.map((result, index) => (
-                        <tr key={result.no}>
+                      paginatedResults.map((result) => (
+                        <tr key={result.id || result.no} className={result.selected ? 'selected-row' : ''}>
                           <td>{result.no}</td>
-                          <td>{result.category}</td>
-                          <td>{result.itemDescription}</td>
-                          <td>{formatCurrency(result.unitPrice)}</td>
-                          <td>{result.supplierName}</td>
+                          <td><Badge className="supplier-category-badge">{result.category}</Badge></td>
+                          <td className="supplier-item-cell">{result.itemDescription}</td>
+                          <td className="supplier-price-cell">{formatCurrency(result.unitPrice)}</td>
+                          <td className="supplier-name-cell">{result.supplierName}</td>
                           <td className="text-center">
                             <Form.Check
                               type="checkbox"
                               checked={result.selected}
-                              onChange={() => handleSelectRow(index)}
+                              onChange={() => handleSelectRow(result)}
                             />
                           </td>
                         </tr>
@@ -490,7 +508,7 @@ const SupplierSearch: React.FC = () => {
               )}
 
               {/* Pagination */}
-              <div className="d-flex justify-content-between align-items-center mt-3">
+              <div className="supplier-results-footer">
                 <div>
                   <Button
                     variant="outline-primary"
@@ -501,8 +519,8 @@ const SupplierSearch: React.FC = () => {
                     Previous
                   </Button>
                 </div>
-                <div className="d-flex gap-2 align-items-center">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <div className="supplier-page-buttons">
+                  {Array.from({ length: totalPages || 1 }, (_, i) => i + 1).map((page) => (
                     <Button
                       key={page}
                       variant={currentPage === page ? 'primary' : 'outline-primary'}
@@ -517,8 +535,8 @@ const SupplierSearch: React.FC = () => {
                   <Button
                     variant="outline-primary"
                     size="sm"
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(Math.min(totalPages || 1, currentPage + 1))}
+                    disabled={currentPage === (totalPages || 1)}
                   >
                     Next
                   </Button>
@@ -526,9 +544,11 @@ const SupplierSearch: React.FC = () => {
               </div>
 
               {/* Add Button */}
-              <div className="d-flex justify-content-end mt-3">
-                <Button variant="primary" onClick={handleAddSelected}>
-                  ADD
+              <div className="supplier-add-bar">
+                <span>{selectedCount} supplier{selectedCount === 1 ? '' : 's'} selected for canvass</span>
+                <Button variant="primary" onClick={handleAddSelected} disabled={selectedCount === 0}>
+                  <i className="bi bi-plus-circle me-2"></i>
+                  Add to Canvass
                 </Button>
               </div>
             </Card.Body>

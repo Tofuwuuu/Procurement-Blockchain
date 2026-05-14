@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Container, Row, Col, Card, Table, Button, Badge, 
-  Form, Modal, Alert, InputGroup 
+  Form, Modal, InputGroup 
 } from 'react-bootstrap';
-import { apiService, User, CreateUserData } from '../services/api';
+import { apiService, User } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
@@ -87,6 +87,7 @@ const mockUsers: User[] = [
     updated_at: "2025-08-11T11:30:00Z"
   }
 ];
+void mockUsers;
 
 const mockRoles = [
   'admin',
@@ -164,20 +165,20 @@ const Users: React.FC = () => {
       setUsers(response);
         setUsingMockData(false);
       } catch (apiError) {
-        console.log('API not available, using mock data...');
-        // Use mock data if API fails
-        setUsers(mockUsers);
-        setUsingMockData(true);
-        
-        // No toast notification needed
+        console.error('Users endpoint is not available:', apiError);
+        setUsers([]);
+        setUsingMockData(false);
+        setToastMessage('User management is coming soon. The backend endpoint is not available yet.');
+        setToastType('info');
+        setShowToast(true);
       }
     } catch (error) {
       console.error('Failed to load users:', error);
-      // Fallback to mock data
-      setUsers(mockUsers);
-      setUsingMockData(true);
-      
-      // No toast notification needed
+      setUsers([]);
+      setUsingMockData(false);
+      setToastMessage('User management is coming soon. The backend endpoint is not available yet.');
+      setToastType('info');
+      setShowToast(true);
     } finally {
       setLoading(false);
     }
@@ -228,37 +229,10 @@ const Users: React.FC = () => {
 
     try {
       if (usingMockData) {
-        // Simulate API call for mock data
-        if (editingUser) {
-          const updatedUsers = users.map(u => 
-            u.id === editingUser.id 
-              ? { 
-                  ...u, 
-                  full_name: formData.full_name,
-                  position: formData.position,
-                  department: formData.department,
-                  role: formData.role,
-                  updated_at: new Date().toISOString()
-                }
-              : u
-          );
-          setUsers(updatedUsers);
-          setToastMessage('User updated successfully (Demo)');
-        } else {
-          const newUser: User = {
-            id: users.length + 1,
-            username: formData.username,
-            full_name: formData.full_name,
-            position: formData.position,
-            department: formData.department,
-            role: formData.role,
-            is_admin: formData.role === 'admin',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-          setUsers([...users, newUser]);
-          setToastMessage('User created successfully (Demo)');
-        }
+        setToastMessage('User management is coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
+        setShowToast(true);
+        return;
       } else {
         // Real API call
         if (editingUser) {
@@ -302,9 +276,10 @@ const Users: React.FC = () => {
 
     try {
       if (usingMockData) {
-        // Simulate deletion for mock data
-        setUsers(users.filter(u => u.id !== userId));
-        setToastMessage('User deleted successfully (Demo)');
+        setToastMessage('User deletion is coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
+        setShowToast(true);
+        return;
       } else {
       await apiService.deleteUser(userId);
         setToastMessage('User deleted successfully');
@@ -397,9 +372,6 @@ const Users: React.FC = () => {
               <h1 className="h2 mb-1">User Management</h1>
               <p className="text-muted mb-0">
                 Manage system users and their roles
-                {usingMockData && (
-                  <span className="ms-2 badge bg-warning text-dark">Demo Mode</span>
-                )}
               </p>
             </div>
             <Button 

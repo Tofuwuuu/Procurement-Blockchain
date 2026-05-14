@@ -12,7 +12,9 @@ from models import (
     LoginRequest, LoginResponse, CreatePurchaseRequest, PurchaseRequestResponse, UpdatePurchaseRequest,
     CreateInspectionReport, InspectionReportResponse, CreateCustodianSlip, CustodianSlipResponse,
     PendingInspection, CreatePropertyReturnSlip, PropertyReturnSlipResponse,
-    CreateWasteMaterialsReport, WasteMaterialsReportResponse
+    CreateWasteMaterialsReport, WasteMaterialsReportResponse,
+    SupplierCreate, SupplierResponse, CreatePurchaseOrder, UpdatePurchaseOrder, PurchaseOrderResponse,
+    CreateAbstractOfCanvass, AbstractOfCanvassResponse
 )
 from auth import verify_password, create_access_token, decode_access_token
 from datetime import datetime, timezone
@@ -55,6 +57,37 @@ app.include_router(supplier_search_router)
 # HTTP Bearer for token authentication
 security = HTTPBearer()
 
+@app.middleware("http")
+async def audit_workflow_status_changes(request: Request, call_next):
+    response = await call_next(request)
+    audit_entry = getattr(request.state, "workflow_status_change", None)
+
+    if audit_entry and 200 <= response.status_code < 400:
+        try:
+            db = await get_database()
+            now = datetime.now(timezone.utc).isoformat()
+            audit_doc = {
+                "username": audit_entry.get("username", "unknown"),
+                "user_id": audit_entry.get("user_id", 0),
+                "action": audit_entry.get("action", "status_change"),
+                "entity": audit_entry.get("entity"),
+                "table_name": audit_entry.get("entity"),
+                "record_id": str(audit_entry.get("record_id", "")),
+                "old_status": audit_entry.get("old_status"),
+                "new_status": audit_entry.get("new_status"),
+                "old_values": audit_entry.get("old_status"),
+                "new_values": audit_entry.get("new_status"),
+                "ip_address": request.client.host if request.client else "",
+                "user_agent": request.headers.get("user-agent", ""),
+                "created_at": now,
+                "timestamp": now
+            }
+            await db.audit_logs.insert_one(audit_doc)
+        except Exception as audit_error:
+            print(f"Audit log write failed: {audit_error}")
+
+    return response
+
 # Startup event - Connect to MongoDB
 @app.on_event("startup")
 async def startup_event():
@@ -86,6 +119,308 @@ async def health_check():
             "database": "disconnected",
             "error": str(e)
         }
+
+@app.get("/api/stats")
+async def get_dashboard_stats(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Return real dashboard summary data for the frontend dashboard.
+    """
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    def format_datetime(value):
+        if not value:
+            return datetime.now(timezone.utc).isoformat()
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    def get_supplier_name(pr):
+        selected_supplier_ids = pr.get("selected_supplier_ids") or []
+        suppliers = pr.get("suppliers") or []
+        if selected_supplier_ids and suppliers:
+            selected_supplier = next(
+                (supplier for supplier in suppliers if supplier.get("supplier_id") in selected_supplier_ids),
+                None
+            )
+            if selected_supplier:
+                return selected_supplier.get("name") or selected_supplier.get("supplier_name") or "N/A"
+        if suppliers:
+            first_supplier = suppliers[0]
+            return first_supplier.get("name") or first_supplier.get("supplier_name") or "N/A"
+        return pr.get("entity_name") or pr.get("requested_by") or "N/A"
+
+    try:
+        db = await get_database()
+        purchase_requests_collection = db.purchase_requests
+        purchase_orders_collection = db.purchase_orders
+
+        order_count = await purchase_orders_collection.count_documents({})
+        if order_count > 0:
+            pending_orders = await purchase_orders_collection.count_documents({"status": {"$in": ["Draft", "Pending"]}})
+            approved_orders = await purchase_orders_collection.count_documents({"status": "Approved"})
+        else:
+            pending_orders = await purchase_requests_collection.count_documents({"status": "Pending"})
+            approved_orders = await purchase_requests_collection.count_documents({"status": "Approved"})
+
+        low_inventory = 0
+        try:
+            low_inventory = await db.inventory.count_documents({"quantity": {"$lte": 10}})
+        except Exception:
+            low_inventory = 0
+
+        recent_orders = []
+        if order_count > 0:
+            recent_po_docs = await purchase_orders_collection.find({}).sort("date_created", -1).limit(5).to_list(length=5)
+            for order in recent_po_docs:
+                normalized_order = normalize_purchase_order_response(order)
+                recent_orders.append({
+                    "id": normalized_order["id"],
+                    "po_number": normalized_order["po_number"],
+                    "supplier": {"name": normalized_order["supplier"]["name"]},
+                    "date_created": normalized_order["date_created"],
+                    "status": normalized_order["status"],
+                    "total_amount": normalized_order["total_amount"]
+                })
+        else:
+            recent_purchase_requests = await (
+                purchase_requests_collection
+                .find({})
+                .sort("date_created", -1)
+                .limit(5)
+                .to_list(length=5)
+            )
+
+            for index, pr in enumerate(recent_purchase_requests, start=1):
+                pr_number = pr.get("pr_number") or str(pr.get("_id"))
+                recent_orders.append({
+                    "id": index,
+                    "po_number": pr_number,
+                    "supplier": {
+                        "name": get_supplier_name(pr)
+                    },
+                    "date_created": format_datetime(pr.get("date_created") or pr.get("date")),
+                    "status": pr.get("status") or "Pending",
+                    "total_amount": pr.get("total_amount") or 0
+                })
+
+        return {
+            "pending_orders": pending_orders,
+            "approved_orders": approved_orders,
+            "low_inventory": low_inventory,
+            "recent_orders": recent_orders
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Dashboard stats error: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while loading dashboard stats: {str(e)}"
+        )
+
+async def get_authenticated_user_context(credentials: HTTPAuthorizationCredentials):
+    token = credentials.credentials
+    payload = decode_access_token(token)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    db = await get_database()
+    user = await db.users.find_one({"username": payload.get("sub")})
+    user_id = 0
+    if user:
+        raw_user_id = user.get("id") or user.get("_id") or payload.get("sub")
+        try:
+            user_id = int(raw_user_id)
+        except Exception:
+            user_id = abs(hash(str(raw_user_id))) % 2147483647
+
+    return {
+        "payload": payload,
+        "username": payload.get("sub") or "unknown",
+        "user_id": user_id,
+        "user": user
+    }
+
+def mark_status_change_audit(request: Request, user_context: dict, entity: str, record_id: str, old_status: Optional[str], new_status: Optional[str]):
+    if new_status is None or old_status == new_status:
+        return
+    request.state.workflow_status_change = {
+        "username": user_context.get("username", "unknown"),
+        "user_id": user_context.get("user_id", 0),
+        "action": "status_change",
+        "entity": entity,
+        "record_id": record_id,
+        "old_status": old_status,
+        "new_status": new_status
+    }
+
+async def generate_sequential_number(collection, field_name: str, prefix: str) -> str:
+    year = datetime.now(timezone.utc).year
+    pattern_prefix = f"{prefix}-{year}-"
+    cursor = collection.find({field_name: {"$regex": f"^{pattern_prefix}"}}).sort(field_name, -1).limit(1)
+    docs = await cursor.to_list(length=1)
+    next_number = 1
+    if docs:
+        last_value = docs[0].get(field_name, "")
+        try:
+            next_number = int(str(last_value).split("-")[-1]) + 1
+        except Exception:
+            next_number = 1
+    return f"{pattern_prefix}{next_number:03d}"
+
+async def get_next_numeric_id(collection) -> int:
+    cursor = collection.find({"id": {"$exists": True}}).sort("id", -1).limit(1)
+    docs = await cursor.to_list(length=1)
+    return int(docs[0].get("id", 0)) + 1 if docs else 1
+
+def normalize_supplier_response(supplier: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    supplier_id = supplier.get("id") or supplier.get("supplier_id") or 0
+    try:
+        supplier_id = int(supplier_id)
+    except Exception:
+        supplier_id = abs(hash(str(supplier_id))) % 2147483647
+    return {
+        "id": supplier_id,
+        "name": supplier.get("name") or supplier.get("supplier_name") or "N/A",
+        "address": supplier.get("address") or "",
+        "province": supplier.get("province") or "",
+        "contact_person": supplier.get("contact_person") or "",
+        "phone": supplier.get("phone") or "",
+        "email": supplier.get("email"),
+        "bir_tin": supplier.get("bir_tin") or "",
+        "is_active": supplier.get("is_active", True),
+        "created_at": supplier.get("created_at") or now,
+        "updated_at": supplier.get("updated_at") or supplier.get("created_at") or now
+    }
+
+def normalize_purchase_order_response(order: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    order_id = order.get("id") or 0
+    try:
+        order_id = int(order_id)
+    except Exception:
+        order_id = abs(hash(str(order_id))) % 2147483647
+    supplier = normalize_supplier_response(order.get("supplier") or {})
+    items = []
+    for index, item in enumerate(order.get("items") or [], start=1):
+        product = item.get("product") or {}
+        product_id = item.get("product_id") or product.get("id") or index
+        try:
+            product_id = int(product_id)
+        except Exception:
+            product_id = index
+        quantity = item.get("quantity") or 0
+        unit_price = item.get("unit_price") or product.get("unit_price") or 0
+        items.append({
+            "id": item.get("id") or index,
+            "product_id": product_id,
+            "product": {
+                "id": product_id,
+                "name": product.get("name") or item.get("item_description") or "Unknown Item",
+                "description": product.get("description") or "",
+                "unit": product.get("unit") or item.get("unit") or "pcs",
+                "unit_price": unit_price,
+                "category": product.get("category") or "",
+                "is_active": product.get("is_active", True)
+            },
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_price": item.get("total_price") if item.get("total_price") is not None else quantity * unit_price
+        })
+    return {
+        "id": order_id,
+        "po_number": order.get("po_number") or "",
+        "pr_number": order.get("pr_number"),
+        "supplier_id": supplier["id"],
+        "supplier": supplier,
+        "delivery_address": order.get("delivery_address") or "",
+        "notes": order.get("notes") or "",
+        "status": order.get("status") or "Draft",
+        "total_amount": order.get("total_amount") or sum(item["total_price"] for item in items),
+        "date_created": order.get("date_created") or now,
+        "date_updated": order.get("date_updated") or order.get("date_created") or now,
+        "items": items
+    }
+
+def select_canvass_supplier(pr: dict, selected_supplier_id: Optional[str] = None) -> Optional[dict]:
+    suppliers = pr.get("suppliers") or []
+    selected_ids = pr.get("selected_supplier_ids") or []
+    target_id = selected_supplier_id or (selected_ids[0] if selected_ids else None)
+    if target_id:
+        selected = next((supplier for supplier in suppliers if str(supplier.get("supplier_id")) == str(target_id)), None)
+        if selected:
+            return selected
+    return suppliers[0] if suppliers else None
+
+async def upsert_abstract_of_canvass(db, pr: dict, selected_supplier_id: Optional[str], username: str, remarks: str = "") -> Optional[dict]:
+    selected_supplier = select_canvass_supplier(pr, selected_supplier_id)
+    if not selected_supplier:
+        return None
+
+    supplier_id = str(selected_supplier.get("supplier_id") or selected_supplier_id or "")
+    now = datetime.now(timezone.utc).isoformat()
+    abstract_doc = {
+        "pr_number": pr.get("pr_number"),
+        "pr_id": str(pr.get("_id")),
+        "selected_supplier_id": supplier_id,
+        "selected_supplier": selected_supplier,
+        "suppliers": pr.get("suppliers") or [],
+        "total_amount": pr.get("total_amount", 0),
+        "status": "Awarded",
+        "remarks": remarks,
+        "awarded_by": username,
+        "date_updated": now
+    }
+    existing = await db.abstracts_of_canvass.find_one({"pr_number": pr.get("pr_number")})
+    if existing:
+        await db.abstracts_of_canvass.update_one({"_id": existing["_id"]}, {"$set": abstract_doc})
+        abstract_doc["_id"] = existing["_id"]
+        abstract_doc["date_created"] = existing.get("date_created", now)
+    else:
+        abstract_doc["date_created"] = now
+        result = await db.abstracts_of_canvass.insert_one(abstract_doc)
+        abstract_doc["_id"] = result.inserted_id
+
+    await db.purchase_requests.update_one(
+        {"_id": pr["_id"]},
+        {"$set": {
+            "selected_supplier_ids": [supplier_id],
+            "canvass_submitted_at": now,
+            "date_updated": now
+        }}
+    )
+    return abstract_doc
+
+def normalize_abstract_response(doc: dict) -> dict:
+    return {
+        "id": str(doc.get("_id")),
+        "pr_number": doc.get("pr_number") or "",
+        "selected_supplier_id": str(doc.get("selected_supplier_id") or ""),
+        "selected_supplier": doc.get("selected_supplier"),
+        "suppliers": doc.get("suppliers") or [],
+        "total_amount": doc.get("total_amount") or 0,
+        "status": doc.get("status") or "Awarded",
+        "remarks": doc.get("remarks") or "",
+        "awarded_by": doc.get("awarded_by"),
+        "date_created": doc.get("date_created") or datetime.now(timezone.utc).isoformat(),
+        "date_updated": doc.get("date_updated")
+    }
 
 # Login endpoint
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -158,7 +493,8 @@ async def login(login_request: LoginRequest):
         token_data = {
             "sub": user.get("username", ""),
             "user_id": str(user_id),
-            "role": role_name
+            "role": role_name,
+            "is_admin": is_admin
         }
         access_token = create_access_token(data=token_data)
         
@@ -262,6 +598,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 return dt.isoformat()
             return str(dt)
         
+        mark_status_change_audit(
+            request,
+            user_context,
+            "purchase_requests",
+            updated_pr.get("pr_number") or str(updated_pr.get("_id")),
+            pr.get("status"),
+            updated_pr.get("status")
+        )
+
         try:
             user_id_int = int(user_id) if str(user_id).isdigit() else hash(str(user_id)) % 2147483647
         except:
@@ -559,18 +904,13 @@ async def get_purchase_request(
 async def update_purchase_request(
     pr_id: str,
     update_data: UpdatePurchaseRequest,
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Update a purchase request (e.g., change status to Approved)"""
     try:
-        token = credentials.credentials
-        payload = decode_access_token(token)
-        
-        if payload is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token"
-            )
+        user_context = await get_authenticated_user_context(credentials)
+        payload = user_context["payload"]
         
         db = await get_database()
         purchase_requests_collection = db.purchase_requests
@@ -681,6 +1021,12 @@ async def update_purchase_request(
                 # Insert into pending_inspections database
                 await pending_inspections_collection.insert_one(pending_inspection_doc)
                 print(f"✅ Saved confirmed purchase order {pr.get('pr_number')} to pending_inspections database")
+            await upsert_abstract_of_canvass(
+                db,
+                {**pr, **update_doc},
+                (update_doc.get("selected_supplier_ids") or pr.get("selected_supplier_ids") or [None])[0],
+                user_context.get("username", "unknown")
+            )
         
         # Always update date_updated timestamp
         update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
@@ -777,6 +1123,281 @@ async def update_purchase_request(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred: {str(e)}"
         )
+
+# Supplier endpoints
+@app.get("/api/suppliers", response_model=List[SupplierResponse])
+async def get_suppliers(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    suppliers = await db.suppliers.find({}).sort("name", 1).to_list(length=None)
+    return [SupplierResponse(**normalize_supplier_response(supplier)) for supplier in suppliers]
+
+@app.post("/api/suppliers/award", response_model=AbstractOfCanvassResponse)
+async def award_supplier_from_canvass(award: CreateAbstractOfCanvass, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    from bson import ObjectId
+
+    query = {}
+    if award.pr_id:
+        try:
+            query = {"_id": ObjectId(award.pr_id)}
+        except Exception:
+            query = {"pr_number": award.pr_id}
+    elif award.pr_number:
+        query = {"pr_number": award.pr_number}
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="pr_id or pr_number is required")
+
+    pr = await db.purchase_requests.find_one(query)
+    if not pr:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase request not found")
+
+    abstract_doc = await upsert_abstract_of_canvass(
+        db,
+        pr,
+        award.selected_supplier_id,
+        user_context.get("username", "unknown"),
+        award.remarks or ""
+    )
+    if not abstract_doc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected supplier was not found on this canvass")
+    return AbstractOfCanvassResponse(**normalize_abstract_response(abstract_doc))
+
+@app.get("/api/suppliers/{supplier_id}", response_model=SupplierResponse)
+async def get_supplier(supplier_id: int, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    supplier = await db.suppliers.find_one({"id": supplier_id})
+    if not supplier:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    return SupplierResponse(**normalize_supplier_response(supplier))
+
+@app.post("/api/suppliers", response_model=SupplierResponse)
+async def create_supplier(supplier_data: SupplierCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    now = datetime.now(timezone.utc).isoformat()
+    doc = supplier_data.dict()
+    doc["id"] = await get_next_numeric_id(db.suppliers)
+    doc["created_at"] = now
+    doc["updated_at"] = now
+    await db.suppliers.insert_one(doc)
+    return SupplierResponse(**normalize_supplier_response(doc))
+
+@app.put("/api/suppliers/{supplier_id}", response_model=SupplierResponse)
+async def update_supplier(supplier_id: int, supplier_data: SupplierCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    update_doc = supplier_data.dict()
+    update_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.suppliers.update_one({"id": supplier_id}, {"$set": update_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    supplier = await db.suppliers.find_one({"id": supplier_id})
+    return SupplierResponse(**normalize_supplier_response(supplier))
+
+@app.delete("/api/suppliers/{supplier_id}")
+async def delete_supplier(supplier_id: int, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    result = await db.suppliers.delete_one({"id": supplier_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    return {"message": "Supplier deleted successfully"}
+
+# Purchase Order endpoints
+@app.post("/api/orders", response_model=PurchaseOrderResponse)
+async def create_order(order_data: CreatePurchaseOrder, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    now = datetime.now(timezone.utc).isoformat()
+    order_id = await get_next_numeric_id(db.purchase_orders)
+    po_number = await generate_sequential_number(db.purchase_orders, "po_number", "PO")
+
+    pr = None
+    supplier = None
+    items = []
+    if order_data.pr_id or order_data.pr_number:
+        from bson import ObjectId
+        if order_data.pr_id:
+            try:
+                pr = await db.purchase_requests.find_one({"_id": ObjectId(order_data.pr_id)})
+            except Exception:
+                pr = await db.purchase_requests.find_one({"pr_number": order_data.pr_id})
+        if not pr and order_data.pr_number:
+            pr = await db.purchase_requests.find_one({"pr_number": order_data.pr_number})
+        if not pr:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approved purchase request not found")
+        if str(pr.get("status", "")).lower() not in {"approved", "completed"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Purchase request must be approved before creating a purchase order")
+        selected_supplier = select_canvass_supplier(pr)
+        supplier = normalize_supplier_response(selected_supplier or {"name": pr.get("entity_name", "N/A")})
+        for index, item in enumerate(pr.get("items") or [], start=1):
+            quantity = item.get("quantity") or 0
+            unit_price = item.get("unit_cost") or 0
+            items.append({
+                "id": index,
+                "product_id": index,
+                "product": {
+                    "id": index,
+                    "name": item.get("item_description") or "Unknown Item",
+                    "description": item.get("item_description") or "",
+                    "unit": item.get("unit") or "pcs",
+                    "unit_price": unit_price,
+                    "category": "",
+                    "is_active": True
+                },
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_price": item.get("total_cost") if item.get("total_cost") is not None else quantity * unit_price
+            })
+    else:
+        if not order_data.supplier_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="supplier_id is required when creating a purchase order manually")
+        supplier_doc = await db.suppliers.find_one({"id": order_data.supplier_id})
+        if not supplier_doc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+        supplier = normalize_supplier_response(supplier_doc)
+        for index, item in enumerate(order_data.items or [], start=1):
+            quantity = item.quantity
+            unit_price = item.unit_price
+            product = item.product.dict() if item.product else {}
+            items.append({
+                "id": index,
+                "product_id": item.product_id or index,
+                "product": {
+                    "id": item.product_id or index,
+                    "name": product.get("name") or f"Product {item.product_id or index}",
+                    "description": product.get("description") or "",
+                    "unit": product.get("unit") or "pcs",
+                    "unit_price": unit_price,
+                    "category": product.get("category") or "",
+                    "is_active": product.get("is_active", True)
+                },
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_price": item.total_price if item.total_price is not None else quantity * unit_price
+            })
+
+    total_amount = sum(item["total_price"] for item in items)
+    order_doc = {
+        "id": order_id,
+        "po_number": po_number,
+        "pr_number": pr.get("pr_number") if pr else None,
+        "supplier_id": supplier["id"],
+        "supplier": supplier,
+        "delivery_address": order_data.delivery_address or (pr.get("office_section", "") if pr else ""),
+        "notes": order_data.notes or (pr.get("remark", "") if pr else ""),
+        "status": "Draft",
+        "total_amount": total_amount,
+        "items": items,
+        "created_by": user_context.get("username"),
+        "date_created": now,
+        "date_updated": now
+    }
+    await db.purchase_orders.insert_one(order_doc)
+    mark_status_change_audit(request, user_context, "purchase_orders", po_number, None, "Draft")
+    return PurchaseOrderResponse(**normalize_purchase_order_response(order_doc))
+
+@app.get("/api/orders", response_model=List[PurchaseOrderResponse])
+async def get_orders(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    orders = await db.purchase_orders.find({}).sort("date_created", -1).to_list(length=None)
+    return [PurchaseOrderResponse(**normalize_purchase_order_response(order)) for order in orders]
+
+@app.get("/api/orders/{order_id}", response_model=PurchaseOrderResponse)
+async def get_order(order_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    query = {"po_number": order_id}
+    try:
+        query = {"id": int(order_id)}
+    except Exception:
+        pass
+    order = await db.purchase_orders.find_one(query)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+    return PurchaseOrderResponse(**normalize_purchase_order_response(order))
+
+@app.put("/api/orders/{order_id}", response_model=PurchaseOrderResponse)
+async def update_order(order_id: str, order_data: UpdatePurchaseOrder, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    query = {"po_number": order_id}
+    try:
+        query = {"id": int(order_id)}
+    except Exception:
+        pass
+    order = await db.purchase_orders.find_one(query)
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+
+    update_doc = {k: v for k, v in order_data.dict(exclude_unset=True).items() if v is not None}
+    if order_data.items is not None:
+        update_doc["items"] = [item.dict() for item in order_data.items]
+        update_doc["total_amount"] = sum((item.total_price if item.total_price is not None else item.quantity * item.unit_price) for item in order_data.items)
+    update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
+    await db.purchase_orders.update_one(query, {"$set": update_doc})
+    updated_order = await db.purchase_orders.find_one(query)
+    mark_status_change_audit(request, user_context, "purchase_orders", updated_order.get("po_number"), order.get("status"), updated_order.get("status"))
+    return PurchaseOrderResponse(**normalize_purchase_order_response(updated_order))
+
+@app.post("/api/orders/{order_id}/approve", response_model=PurchaseOrderResponse)
+async def approve_order(order_id: str, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    return await update_order(order_id, UpdatePurchaseOrder(status="Approved"), request, credentials)
+
+# Audit log endpoint
+@app.get("/api/audit-logs")
+async def get_audit_logs(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    action: Optional[str] = Query(""),
+    table_name: Optional[str] = Query(""),
+    username: Optional[str] = Query(""),
+    date_from: Optional[str] = Query(""),
+    date_to: Optional[str] = Query(""),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    query = {}
+    if action:
+        query["action"] = action
+    if table_name:
+        query["table_name"] = table_name
+    if username:
+        query["username"] = {"$regex": username, "$options": "i"}
+    if date_from or date_to:
+        query["created_at"] = {}
+        if date_from:
+            query["created_at"]["$gte"] = date_from
+        if date_to:
+            query["created_at"]["$lte"] = date_to
+
+    skip = (page - 1) * limit
+    total = await db.audit_logs.count_documents(query)
+    docs = await db.audit_logs.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    logs = []
+    for doc in docs:
+        logs.append({
+            "id": str(doc.get("_id")),
+            "user_id": doc.get("user_id", 0),
+            "username": doc.get("username", "unknown"),
+            "action": doc.get("action", "status_change"),
+            "entity": doc.get("entity") or doc.get("table_name"),
+            "table_name": doc.get("table_name") or doc.get("entity"),
+            "record_id": doc.get("record_id", ""),
+            "old_status": doc.get("old_status"),
+            "new_status": doc.get("new_status"),
+            "old_values": doc.get("old_values"),
+            "new_values": doc.get("new_values"),
+            "ip_address": doc.get("ip_address", ""),
+            "user_agent": doc.get("user_agent", ""),
+            "created_at": doc.get("created_at") or doc.get("timestamp")
+        })
+    return {"logs": logs, "total": total, "page": page, "limit": limit}
 
 # Test endpoint to verify purchase requests collection exists
 @app.get("/api/test-purchase-requests")

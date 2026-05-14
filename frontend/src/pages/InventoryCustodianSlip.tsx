@@ -7,6 +7,7 @@ import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './InventoryCustodianSlip.css';
 
 interface CustodianSlipItem {
   item_description: string;
@@ -38,6 +39,7 @@ const InventoryCustodianSlip: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [slips, setSlips] = useState<CustodianSlip[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Submitted' | 'Draft'>('All');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -108,93 +110,173 @@ const InventoryCustodianSlip: React.FC = () => {
     });
   };
 
-  const filteredSlips = slips.filter(slip =>
-    slip.slip_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    slip.received_from.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getSlipTotal = (slip: CustodianSlip): number =>
+    slip.items.reduce((sum, item) => sum + (item.total_value || 0), 0);
+
+  const submittedCount = slips.filter((slip) => slip.status === 'Submitted').length;
+  const draftCount = slips.filter((slip) => slip.status === 'Draft').length;
+  const totalItems = slips.reduce((sum, slip) => sum + slip.items.length, 0);
+  const totalValue = slips.reduce((sum, slip) => sum + getSlipTotal(slip), 0);
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredSlips = slips.filter((slip) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      slip.slip_number.toLowerCase().includes(normalizedSearch) ||
+      slip.po_number.toLowerCase().includes(normalizedSearch) ||
+      slip.received_from.toLowerCase().includes(normalizedSearch) ||
+      slip.received_by.toLowerCase().includes(normalizedSearch);
+
+    const matchesStatus = statusFilter === 'All' || slip.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   if (loading) {
     return (
-      <Container className="py-4">
+      <Container className="py-4 ics-page">
         <LoadingSpinner size="lg" text="Loading..." />
       </Container>
     );
   }
 
   return (
-    <Container className="py-4">
+    <Container fluid className="ics-page py-4">
       {/* Header */}
       <Row className="mb-4">
         <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h2 className="mb-1">Inventory Custodian Slip</h2>
-              <p className="text-muted mb-0">
-                Manage inventory custodian slips for received items
+          <div className="ics-hero">
+            <div className="ics-hero-copy">
+              <span className="ics-eyebrow">Admin records workspace</span>
+              <h2>Inventory Custodian Slip</h2>
+              <p>
+                Review accepted inspection records, validate custody details, and prepare slips for printing.
               </p>
+            </div>
+            <div className="ics-admin-chip">
+              <i className="bi bi-person-badge"></i>
+              <div>
+                <span>Signed in as</span>
+                <strong>{user?.username || 'Admin'}</strong>
+              </div>
             </div>
           </div>
         </Col>
       </Row>
 
-      {/* Search */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <InputGroup>
-            <InputGroup.Text>
-              <i className="bi bi-search"></i>
-            </InputGroup.Text>
-            <Form.Control
-              type="text"
-              placeholder="Search by slip number or received from..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </InputGroup>
+      <Row className="g-3 mb-4">
+        <Col md={3}>
+          <Card className="ics-stat-card">
+            <Card.Body>
+              <span>Total slips</span>
+              <strong>{slips.length}</strong>
+              <small>{submittedCount} submitted</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="ics-stat-card">
+            <Card.Body>
+              <span>Received items</span>
+              <strong>{totalItems}</strong>
+              <small>Across accepted inspections</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="ics-stat-card">
+            <Card.Body>
+              <span>Total value</span>
+              <strong>{formatCurrency(totalValue)}</strong>
+              <small>For current slip list</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="ics-stat-card">
+            <Card.Body>
+              <span>Needs review</span>
+              <strong>{draftCount}</strong>
+              <small>Draft custody slips</small>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       {/* Slips Table */}
-      <Card>
+      <Card className="ics-table-card">
         <Card.Header>
-          <h5 className="mb-0">Custodian Slips</h5>
+          <div>
+            <h5>Custodian Slips</h5>
+            <p>{filteredSlips.length} of {slips.length} records shown</p>
+          </div>
+          <div className="ics-toolbar">
+            <InputGroup className="ics-search">
+              <InputGroup.Text>
+                <i className="bi bi-search"></i>
+              </InputGroup.Text>
+              <Form.Control
+                type="text"
+                placeholder="Search slip, PO, sender, or receiver"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </InputGroup>
+            <Form.Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'All' | 'Submitted' | 'Draft')}
+              aria-label="Filter by status"
+            >
+              <option value="All">All statuses</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Draft">Draft</option>
+            </Form.Select>
+          </div>
         </Card.Header>
         <Card.Body className="p-0">
           {filteredSlips.length > 0 ? (
             <div className="table-responsive">
-              <Table striped bordered hover className="mb-0">
+              <Table hover className="ics-table mb-0">
                 <thead>
                   <tr>
                     <th>Slip Number</th>
+                    <th>P.O. No.</th>
                     <th>Date</th>
                     <th>Received From</th>
                     <th>Received By</th>
-                    <th>Items Count</th>
+                    <th className="text-center">Items</th>
+                    <th className="text-end">Value</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th className="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredSlips.map((slip) => (
                     <tr key={slip.id || slip.slip_number}>
-                      <td><strong>{slip.slip_number || 'N/A'}</strong></td>
+                      <td>
+                        <strong className="ics-slip-number">{slip.slip_number || 'N/A'}</strong>
+                      </td>
+                      <td>{slip.po_number}</td>
                       <td>{formatDate(slip.date)}</td>
                       <td>{slip.received_from}</td>
                       <td>{slip.received_by}</td>
-                      <td>{slip.items.length}</td>
+                      <td className="text-center">
+                        <span className="ics-count-pill">{slip.items.length}</span>
+                      </td>
+                      <td className="text-end">{formatCurrency(getSlipTotal(slip))}</td>
                       <td>
-                        <Badge bg={slip.status === 'Submitted' ? 'success' : 'secondary'}>
+                        <Badge className={`ics-status ${slip.status === 'Submitted' ? 'is-submitted' : 'is-draft'}`}>
                           {slip.status}
                         </Badge>
                       </td>
-                      <td>
-                        <Button 
-                          variant="primary" 
+                      <td className="text-end">
+                        <Button
+                          variant="outline-primary"
                           size="sm"
+                          className="ics-view-btn"
                           onClick={() => handleViewSlip(slip)}
                         >
                           <i className="bi bi-eye me-1"></i>
-                          View
+                          Review
                         </Button>
                       </td>
                     </tr>
@@ -203,12 +285,13 @@ const InventoryCustodianSlip: React.FC = () => {
               </Table>
             </div>
           ) : (
-            <div className="text-center py-5">
-              <i className="bi bi-file-earmark-text text-muted" style={{ fontSize: '3rem' }}></i>
-              <p className="text-muted mt-3">
+            <div className="ics-empty-state">
+              <i className="bi bi-file-earmark-text"></i>
+              <h5>No custodian slips found</h5>
+              <p>
                 {searchTerm 
-                  ? 'No slips found matching your search' 
-                  : 'No inventory custodian slips found. Create a new one to get started.'}
+                  ? 'Try a different slip number, purchase order, sender, receiver, or status filter.'
+                  : 'Accepted inspection records will appear here as inventory custodian slips.'}
               </p>
             </div>
           )}
@@ -219,56 +302,80 @@ const InventoryCustodianSlip: React.FC = () => {
       <Modal 
         show={showDetailModal} 
         onHide={() => setShowDetailModal(false)}
-        size="lg"
+        size="xl"
         centered
+        dialogClassName="ics-detail-modal"
       >
         <Modal.Header closeButton>
-          <Modal.Title>Inventory Custodian Slip Details</Modal.Title>
+          <Modal.Title>
+            <span>Inventory Custodian Slip</span>
+            {selectedSlip && <strong>{selectedSlip.slip_number}</strong>}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedSlip && (
             <>
               {/* Header Info */}
-              <Row className="mb-4">
+              <div className="ics-document-heading">
+                <div>
+                  <span>Custody record</span>
+                  <h3>{selectedSlip.slip_number}</h3>
+                </div>
+                <Badge className={`ics-status ${selectedSlip.status === 'Submitted' ? 'is-submitted' : 'is-draft'}`}>
+                  {selectedSlip.status}
+                </Badge>
+              </div>
+
+              <Row className="g-3 mb-4">
+                <Col md={3}>
+                  <div className="ics-detail-tile">
+                    <span>Reference No.</span>
+                    <strong>{selectedSlip.slip_number}</strong>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="ics-detail-tile">
+                    <span>P.O. No.</span>
+                    <strong>{selectedSlip.po_number}</strong>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="ics-detail-tile">
+                    <span>Date</span>
+                    <strong>{formatDate(selectedSlip.date)}</strong>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="ics-detail-tile">
+                    <span>Total Amount</span>
+                    <strong>{formatCurrency(getSlipTotal(selectedSlip))}</strong>
+                  </div>
+                </Col>
+              </Row>
+
+              <Row className="g-3 mb-4">
                 <Col md={6}>
-                  <Card className="mb-3">
-                    <Card.Body>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>Reference No.</strong></div>
-                        <div className="col-6">{selectedSlip.slip_number}</div>
-                      </div>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>P.O. No.</strong></div>
-                        <div className="col-6">{selectedSlip.po_number}</div>
-                      </div>
-                      <div className="row">
-                        <div className="col-6"><strong>Category</strong></div>
-                        <div className="col-6">5,001 - 49,999.99</div>
-                      </div>
-                    </Card.Body>
-                  </Card>
+                  <div className="ics-person-panel">
+                    <span>Received from</span>
+                    <strong>{selectedSlip.received_from}</strong>
+                  </div>
                 </Col>
                 <Col md={6}>
-                  <Card className="mb-3">
-                    <Card.Body>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>ICS No.</strong></div>
-                        <div className="col-6">{selectedSlip.slip_number}</div>
-                      </div>
-                      <div className="row">
-                        <div className="col-6"><strong>Received by</strong></div>
-                        <div className="col-6">{selectedSlip.received_by}</div>
-                      </div>
-                    </Card.Body>
-                  </Card>
+                  <div className="ics-person-panel">
+                    <span>Received by</span>
+                    <strong>{selectedSlip.received_by}</strong>
+                  </div>
                 </Col>
               </Row>
 
               {/* Items Section */}
-              <h6 className="fw-bold mb-3">List of Items</h6>
+              <div className="ics-section-title">
+                <h6>List of Items</h6>
+                <span>{selectedSlip.items.length} item{selectedSlip.items.length === 1 ? '' : 's'}</span>
+              </div>
               <div className="table-responsive mb-4">
-                <Table bordered striped size="sm">
-                  <thead className="bg-light">
+                <Table size="sm" className="ics-detail-table">
+                  <thead>
                     <tr>
                       <th>Stock/ Property No.</th>
                       <th>Item Description</th>
@@ -290,7 +397,7 @@ const InventoryCustodianSlip: React.FC = () => {
                         <td>{item.unit}</td>
                         <td>{formatCurrency(item.unit_value)}</td>
                         <td>{item.condition}</td>
-                        <td>{formatCurrency(item.total_value)}</td>
+                        <td className="text-end">{formatCurrency(item.total_value)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -299,9 +406,9 @@ const InventoryCustodianSlip: React.FC = () => {
 
               {/* Remarks */}
               {selectedSlip.remarks && (
-                <div className="mb-4">
-                  <h6 className="fw-bold">Remarks</h6>
-                  <p className="text-muted">{selectedSlip.remarks}</p>
+                <div className="ics-remarks">
+                  <h6>Remarks</h6>
+                  <p>{selectedSlip.remarks}</p>
                 </div>
               )}
             </>
@@ -313,6 +420,7 @@ const InventoryCustodianSlip: React.FC = () => {
           </Button>
           <Button 
             variant="primary"
+            className="ics-print-btn"
             onClick={() => window.print()}
           >
             <i className="bi bi-printer me-2"></i>

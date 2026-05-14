@@ -1,0 +1,270 @@
+.orders-page {
+  max-width: 1440px;
+}
+
+.orders-page-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.orders-eyebrow {
+  color: #1b5e20;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.orders-page-header h1 {
+  align-items: center;
+  color: #102a18;
+  display: flex;
+  font-size: 1.85rem;
+  font-weight: 800;
+  gap: 0.65rem;
+  letter-spacing: 0;
+}
+
+.orders-page-header h1 i {
+  color: #1b5e20;
+}
+
+.orders-page-subtitle {
+  color: #607067;
+  max-width: 760px;
+}
+
+.orders-primary-action {
+  min-width: 148px;
+}
+
+.orders-stat-card,
+.orders-list-card {
+  border: 1px solid #dce7df;
+  box-shadow: 0 16px 34px rgba(15, 61, 24, 0.08);
+}
+
+.orders-stat-card:hover,
+.orders-list-card:hover {
+  transform: none;
+}
+
+.orders-stat-card {
+  border-left: 4px solid #1b5e20;
+}
+
+.orders-stat-card.accent-primary {
+  border-left-color: #0d6efd;
+}
+
+.orders-stat-card.accent-warning {
+  border-left-color: #d69e00;
+}
+
+.orders-stat-card.accent-success {
+  border-left-color: #15803d;
+}
+
+.orders-stat-card .card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 92px;
+  padding: 1rem 1.1rem;
+}
+
+.orders-stat-card span {
+  color: #6b7a70;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.orders-stat-card strong {
+  color: #14251a;
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.orders-list-toolbar {
+  align-items: center;
+  background: #fbfdfc;
+  border-bottom: 1px solid #dce7df;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+}
+
+.orders-list-toolbar h5 {
+  color: #14251a;
+  font-weight: 800;
+  margin: 0 0 0.2rem;
+}
+
+.orders-list-toolbar span {
+  color: #66766b;
+  font-size: 0.9rem;
+}
+
+.orders-list-controls {
+  display: flex;
+  gap: 0.75rem;
+  min-width: min(620px, 100%);
+}
+
+.orders-search-control {
+  min-width: 320px;
+}
+
+.orders-search-control .input-group-text,
+.orders-search-control .form-control,
+.orders-status-filter {
+  border-color: #d4e1d8;
+}
+
+.orders-search-control .input-group-text {
+  background: #f2f7f3;
+  color: #1b5e20;
+}
+
+.orders-status-filter {
+  max-width: 170px;
+}
+
+.orders-table {
+  --bs-table-hover-bg: #f4faf5;
+}
+
+.orders-table thead th {
+  background: #f2f7f3;
+  border-bottom: 1px solid #dce7df;
+  color: #405246;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0.85rem 1rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.orders-table tbody td {
+  border-color: #e7eee9;
+  color: #1f2f25;
+  padding: 0.85rem 1rem;
+  vertical-align: middle;
+}
+
+.orders-number {
+  color: #0d6efd !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.orders-supplier {
+  font-weight: 700;
+}
+
+.orders-amount {
+  color: #0f3d18 !important;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.orders-status-badge {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 0.72rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.orders-status-draft {
+  background: #e5e7eb !important;
+  color: #374151 !important;
+}
+
+.orders-status-pending {
+  background: #fff4cc !important;
+  color: #7a5600 !important;
+}
+
+.orders-status-approved {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+}
+
+.orders-status-completed {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.orders-status-cancelled {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+
+.orders-row-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.orders-action-button {
+  min-width: 76px;
+}
+
+.orders-icon-button {
+  width: 36px;
+}
+
+.orders-empty-state {
+  color: #69786d;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.orders-empty-state i,
+.orders-empty-state strong,
+.orders-empty-state span {
+  display: block;
+}
+
+.orders-empty-state i {
+  color: #94a89b;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.orders-empty-state strong {
+  color: #233327;
+  margin-bottom: 0.2rem;
+}
+
+@media (max-width: 992px) {
+  .orders-page-header,
+  .orders-list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .orders-list-controls {
+    flex-direction: column;
+  }
+
+  .orders-search-control {
+    min-width: 0;
+  }
+
+  .orders-status-filter {
+    max-width: none;
+  }
+
+  .orders-primary-action {
+    width: 100%;
+  }
+}

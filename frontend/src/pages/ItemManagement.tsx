@@ -3,7 +3,6 @@ import {
   Container, Row, Col, Card, Table, Button, Badge, 
   Modal, Form, Alert, Tabs, Tab, Pagination 
 } from 'react-bootstrap';
-import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
 
@@ -23,7 +22,6 @@ interface Item {
 }
 
 const ItemManagement: React.FC = () => {
-  const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -113,13 +111,11 @@ const ItemManagement: React.FC = () => {
       approved_date: "2025-01-18T09:15:00Z"
     }
   ];
+  void mockItems;
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setItems(mockItems);
-      setLoading(false);
-    }, 1000);
+    setItems([]);
+    setLoading(false);
   }, []);
 
   const handleApprove = (item: Item) => {
@@ -134,44 +130,21 @@ const ItemManagement: React.FC = () => {
 
   const confirmApprove = () => {
     if (selectedItem) {
-      const updatedItems = items.map(item => 
-        item.id === selectedItem.id 
-          ? { 
-              ...item, 
-              status: 'approved' as const,
-              approved_by: user?.username || 'admin',
-              approved_date: new Date().toISOString()
-            }
-          : item
-      );
-      setItems(updatedItems);
       setShowApprovalModal(false);
       setSelectedItem(null);
-      setToastMessage('Item approved successfully (Demo)');
-      setToastType('success');
+      setToastMessage('Item approval is coming soon. The backend endpoint is not available yet.');
+      setToastType('warning');
       setShowToast(true);
     }
   };
 
   const confirmReject = () => {
     if (selectedItem && rejectionReason.trim()) {
-      const updatedItems = items.map(item => 
-        item.id === selectedItem.id 
-          ? { 
-              ...item, 
-              status: 'rejected' as const,
-              reason: rejectionReason,
-              approved_by: user?.username || 'admin',
-              approved_date: new Date().toISOString()
-            }
-          : item
-      );
-      setItems(updatedItems);
       setShowRejectionModal(false);
       setSelectedItem(null);
       setRejectionReason('');
-      setToastMessage('Item rejected successfully (Demo)');
-      setToastType('success');
+      setToastMessage('Item rejection is coming soon. The backend endpoint is not available yet.');
+      setToastType('warning');
       setShowToast(true);
     }
   };
@@ -242,10 +215,9 @@ const ItemManagement: React.FC = () => {
               <h2 className="mb-1">Item Management</h2>
               <p className="text-muted mb-0">
                 Approve, reject, and manage proposed items
-                <span className="ms-2 badge bg-warning text-dark">Demo Mode</span>
               </p>
             </div>
-            <Button variant="primary">
+            <Button variant="primary" disabled title="Coming soon">
               <i className="bi bi-plus me-2"></i>
               Add New Item
             </Button>
@@ -322,6 +294,11 @@ const ItemManagement: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <Alert variant="info" className="mb-4">
+        <i className="bi bi-info-circle me-2"></i>
+        Item management is coming soon. No backend endpoint is available yet.
+      </Alert>
 
       {/* Tabs */}
       <Card>

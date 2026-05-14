@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Container, Row, Col, Card, Table, Button, Badge, 
-  Form, Modal, Alert, Spinner, InputGroup 
+  Form, Modal, Alert, InputGroup 
 } from 'react-bootstrap';
 import { apiService, PurchaseOrder, CreateOrderData, Supplier, Product, PurchaseRequest, CreatePurchaseRequestData } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './Orders.css';
 
 // Mock data for demonstration
 const mockSuppliers: Supplier[] = [
@@ -213,6 +214,7 @@ const mockOrders: PurchaseOrder[] = [
     ]
   }
 ];
+void mockOrders;
 
 interface EmployeeFormDataItem {
   unit: string;
@@ -244,6 +246,7 @@ const Orders: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [usingMockData, setUsingMockData] = useState(false);
@@ -406,21 +409,20 @@ const Orders: React.FC = () => {
           setUsingMockData(false);
         }
       } catch (apiError) {
-        console.log('API not available, using mock data...', apiError);
-        // Use mock data if API fails
-        setOrders(mockOrders);
-        setSuppliers(mockSuppliers);
-        setProducts(mockProducts);
-        setUsingMockData(true);
+        console.error('Orders endpoint is not available:', apiError);
+        setOrders([]);
+        setSuppliers([]);
+        setProducts([]);
+        setUsingMockData(false);
+        setError('Purchase order data is coming soon. The backend endpoint is not available yet.');
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      // Fallback to mock data
-      setOrders(mockOrders);
-      setSuppliers(mockSuppliers);
-      setProducts(mockProducts);
-      setUsingMockData(true);
-      setError(null);
+      setOrders([]);
+      setSuppliers([]);
+      setProducts([]);
+      setUsingMockData(false);
+      setError('Purchase order data is coming soon. The backend endpoint is not available yet.');
     } finally {
       setLoading(false);
     }
@@ -457,8 +459,6 @@ const Orders: React.FC = () => {
     if (user?.role === 'employee') {
       try {
         // Calculate total from employee form items
-        const totalAmount = employeeFormData.items.reduce((sum, item) => sum + item.total_cost, 0);
-        
         // Prepare purchase request data
         const purchaseRequestData: CreatePurchaseRequestData = {
           entity_name: employeeFormData.entity_name,
@@ -479,34 +479,10 @@ const Orders: React.FC = () => {
         };
 
         if (usingMockData) {
-          // Simulate API call for mock data
-          const year = new Date().getFullYear();
-          const prCount = orders.filter(o => o.po_number.startsWith(`PR-${year}-`)).length + 1;
-          const prNumber = `PR-${year}-${String(prCount).padStart(3, '0')}`;
-          
-          const newOrder: PurchaseOrder = {
-            id: orders.length + 1,
-            po_number: prNumber,
-            supplier_id: 0,
-            supplier: { id: 0, name: employeeFormData.entity_name, address: '', province: '', contact_person: '', phone: '', bir_tin: '', is_active: true, created_at: '', updated_at: '' },
-            delivery_address: employeeFormData.office_section,
-            notes: employeeFormData.fund_cluster || 'No remarks',
-            status: 'Pending',
-            total_amount: totalAmount,
-            date_created: new Date().toISOString(),
-            date_updated: new Date().toISOString(),
-            items: purchaseRequestData.items.map((item, index) => ({
-              id: index + 1,
-              product_id: index + 1,
-              product: { id: index + 1, name: item.item_description, unit: item.unit, unit_price: item.unit_cost, category: '', is_active: true },
-              quantity: item.quantity,
-              unit_price: item.unit_cost,
-              total_price: item.total_cost
-            }))
-          };
-
-          setOrders([...orders, newOrder]);
-          setToastMessage('Purchase request submitted successfully (Demo)');
+          setToastMessage('Purchase request submission is coming soon. The backend endpoint is not available yet.');
+          setToastType('warning');
+          setShowToast(true);
+          return;
         } else {
           // Real API call - save to purchase_requests collection
           console.log('📤 Submitting purchase request to backend:', purchaseRequestData);
@@ -535,35 +511,10 @@ const Orders: React.FC = () => {
 
     try {
       if (usingMockData) {
-        // Simulate API call for mock data
-        const newOrder: PurchaseOrder = {
-          id: orders.length + 1,
-          po_number: `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(orders.length + 1).padStart(3, '0')}`,
-          supplier_id: formData.supplier_id,
-          supplier: suppliers.find(s => s.id === formData.supplier_id)!,
-          delivery_address: formData.delivery_address,
-          notes: formData.notes || '',
-          status: 'Draft',
-          total_amount: formData.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0),
-          date_created: new Date().toISOString(),
-          date_updated: new Date().toISOString(),
-          items: formData.items.map((item, index) => ({
-            id: index + 1,
-            product_id: item.product_id,
-            product: products.find(p => p.id === item.product_id)!,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            total_price: item.quantity * item.unit_price
-          }))
-        };
-
-        if (editingOrder) {
-          setOrders(orders.map(order => order.id === editingOrder.id ? { ...newOrder, id: editingOrder.id } : order));
-          setToastMessage('Purchase order updated successfully (Demo)');
-        } else {
-          setOrders([...orders, newOrder]);
-          setToastMessage('Purchase order created successfully (Demo)');
-        }
+        setToastMessage('Purchase order management is coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
+        setShowToast(true);
+        return;
       } else {
         // Real API call
         if (editingOrder) {
@@ -591,11 +542,10 @@ const Orders: React.FC = () => {
   const handleApprove = async (id: number) => {
     try {
       if (usingMockData) {
-        // Simulate approval for mock data
-        setOrders(orders.map(order => 
-          order.id === id ? { ...order, status: 'Approved' as const } : order
-        ));
-        setToastMessage('Purchase order approved successfully (Demo)');
+        setToastMessage('Purchase order approval is coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
+        setShowToast(true);
+        return;
       } else {
         await apiService.approveOrder(id);
         setToastMessage('Purchase order approved successfully');
@@ -616,9 +566,10 @@ const Orders: React.FC = () => {
 
     try {
       if (usingMockData) {
-        // Simulate deletion for mock data
-        setOrders(orders.filter(order => order.id !== id));
-        setToastMessage('Purchase order deleted successfully (Demo)');
+        setToastMessage('Purchase order deletion is coming soon. The backend endpoint is not available yet.');
+        setToastType('warning');
+        setShowToast(true);
+        return;
       } else {
         await apiService.deleteOrder(id);
         setToastMessage('Purchase order deleted successfully');
@@ -702,38 +653,64 @@ const Orders: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: { [key: string]: { variant: string; text: string } } = {
-      'Draft': { variant: 'secondary', text: 'Draft' },
-      'Pending': { variant: 'warning', text: 'Pending' },
-      'Approved': { variant: 'success', text: 'Approved' },
-      'Completed': { variant: 'primary', text: 'Completed' },
-      'Cancelled': { variant: 'danger', text: 'Cancelled' },
+    const statusConfig: { [key: string]: { className: string; text: string } } = {
+      'Draft': { className: 'orders-status-badge orders-status-draft', text: 'Draft' },
+      'Pending': { className: 'orders-status-badge orders-status-pending', text: 'Pending' },
+      'Approved': { className: 'orders-status-badge orders-status-approved', text: 'Approved' },
+      'Completed': { className: 'orders-status-badge orders-status-completed', text: 'Completed' },
+      'Cancelled': { className: 'orders-status-badge orders-status-cancelled', text: 'Cancelled' },
     };
 
-    const config = statusConfig[status] || { 
-      variant: 'secondary', 
-      text: status 
-    };
+    const config = statusConfig[status] || { className: 'orders-status-badge orders-status-draft', text: status };
 
-    return <Badge bg={config.variant}>{config.text}</Badge>;
+    return <Badge className={config.className}>{config.text}</Badge>;
   };
 
-  const filteredOrders = orders.filter(order =>
-    order.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.status.toLowerCase().includes(searchTerm.toLowerCase())
+  const orderStats = useMemo(() => {
+    const totalValue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+    return {
+      total: orders.length,
+      completed: orders.filter(order => order.status === 'Completed').length,
+      pending: orders.filter(order => order.status === 'Pending').length,
+      draft: orders.filter(order => order.status === 'Draft').length,
+      totalValue
+    };
+  }, [orders]);
+
+  const statusOptions = useMemo(
+    () => ['All', ...Array.from(new Set(orders.map(order => order.status).filter(Boolean)))],
+    [orders]
   );
+
+  const filteredOrders = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return orders.filter(order => {
+      const matchesStatus = statusFilter === 'All' || order.status === statusFilter;
+      const searchableText = [
+        order.po_number,
+        order.supplier.name,
+        order.delivery_address,
+        order.notes,
+        order.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return matchesStatus && (!normalizedSearch || searchableText.includes(normalizedSearch));
+    });
+  }, [orders, searchTerm, statusFilter]);
 
   if (loading) {
     return (
-      <Container>
+      <Container fluid className="orders-page py-4">
         <LoadingSpinner size="lg" text="Loading orders..." />
       </Container>
     );
   }
 
   return (
-    <Container fluid className="py-5">
+    <Container fluid className="orders-page py-4">
       {error && (
         <Row className="mb-4">
           <Col>
@@ -746,33 +723,28 @@ const Orders: React.FC = () => {
       )}
 
       {/* Header Section */}
-      <Row className="mb-5">
-        <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h1 className="fw-bold text-dark mb-2">
-                <i className="bi bi-cart text-primary me-3"></i>
-                {user?.role === 'employee' ? 'Purchase Requests' : 'Purchase Orders'}
-              </h1>
-              <p className="text-muted fs-6">
-                {user?.role === 'employee' 
-                  ? 'Manage purchase requests and track procurement activities'
-                  : 'Manage purchase orders and track procurement activities'
-                }
-              </p>
-            </div>
-            <Button 
-              variant="primary" 
-              size="lg"
-              onClick={handleShowModal}
-              className="px-4 py-2"
-            >
-              <i className="bi bi-plus-circle me-2"></i>
-              {user?.role === 'employee' ? 'New Request' : 'New Order'}
-            </Button>
-          </div>
-        </Col>
-      </Row>
+      <div className="orders-page-header">
+        <div>
+          <div className="orders-eyebrow">{user?.role === 'employee' ? 'Request Desk' : 'Procurement Orders'}</div>
+          <h1 className="mb-1">
+            <i className="bi bi-cart-check"></i>
+            {user?.role === 'employee' ? 'Purchase Requests' : 'Purchase Orders'}
+          </h1>
+          <p className="orders-page-subtitle mb-0">
+            {user?.role === 'employee'
+              ? 'Create and track purchase requests through the procurement workflow.'
+              : 'Review completed purchase requests and manage purchase order activity.'}
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          onClick={handleShowModal}
+          className="orders-primary-action"
+        >
+          <i className="bi bi-plus-circle me-2"></i>
+          {user?.role === 'employee' ? 'New Request' : 'New Order'}
+        </Button>
+      </div>
 
       {/* Employee Purchase Request List */}
       {user?.role === 'employee' ? (
@@ -854,54 +826,101 @@ const Orders: React.FC = () => {
         </Card>
       ) : (
         <>
-          {/* Search Section */}
-          <Row className="mb-4">
-            <Col md={6}>
-              <InputGroup>
-                <InputGroup.Text className="bg-light border-light">
-                  <i className="bi bi-search"></i>
-                </InputGroup.Text>
-                <Form.Control
-                  placeholder="Search by PO number or supplier..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="border-light"
-                />
-              </InputGroup>
+          <Row className="g-3 mb-3">
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card">
+                <Card.Body>
+                  <span>Total Orders</span>
+                  <strong>{orderStats.total}</strong>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-primary">
+                <Card.Body>
+                  <span>Completed</span>
+                  <strong>{orderStats.completed}</strong>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-warning">
+                <Card.Body>
+                  <span>Pending / Draft</span>
+                  <strong>{orderStats.pending + orderStats.draft}</strong>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-success">
+                <Card.Body>
+                  <span>Total Value</span>
+                  <strong>{formatCurrency(orderStats.totalValue)}</strong>
+                </Card.Body>
+              </Card>
             </Col>
           </Row>
 
           {/* Orders Table Section */}
           <Row>
             <Col>
-              <Card className="border-0 shadow-sm rounded-lg overflow-hidden">
+              <Card className="orders-list-card">
                 <Card.Body className="p-0">
+                  <div className="orders-list-toolbar">
+                    <div>
+                      <h5>Order Register</h5>
+                      <span>{filteredOrders.length} of {orders.length} orders shown</span>
+                    </div>
+                    <div className="orders-list-controls">
+                      <InputGroup className="orders-search-control">
+                        <InputGroup.Text>
+                          <i className="bi bi-search"></i>
+                        </InputGroup.Text>
+                        <Form.Control
+                          placeholder="Search PO number, supplier, status..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                      </InputGroup>
+                      <Form.Select
+                        className="orders-status-filter"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        aria-label="Filter by status"
+                      >
+                        {statusOptions.map(status => (
+                          <option key={status} value={status}>
+                            {status === 'All' ? 'All statuses' : status}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  </div>
                   {filteredOrders.length > 0 ? (
                     <div className="table-responsive">
-                      <Table striped bordered hover className="mb-0">
-                        <thead className="bg-light border-bottom">
+                      <Table hover className="orders-table mb-0">
+                        <thead>
                           <tr>
-                            <th className="fw-bold text-dark">PO Number</th>
-                            <th className="fw-bold text-dark">Supplier</th>
-                            <th className="fw-bold text-dark">Date Created</th>
-                            <th className="fw-bold text-dark">Status</th>
-                            <th className="fw-bold text-dark text-end">Total Amount</th>
-                            <th className="fw-bold text-dark text-center">Actions</th>
+                            <th>PO Number</th>
+                            <th>Supplier</th>
+                            <th>Date Created</th>
+                            <th>Status</th>
+                            <th className="text-end">Total Amount</th>
+                            <th className="text-end">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filteredOrders.map((order) => (
-                            <tr key={order.id} className="align-middle">
-                              <td className="fw-bold text-primary">{order.po_number}</td>
-                              <td>{order.supplier.name}</td>
-                              <td>{formatDate(order.date_created)}</td>
+                            <tr key={order.id}>
+                              <td className="orders-number">{order.po_number}</td>
+                              <td className="orders-supplier">{order.supplier.name}</td>
+                              <td className="text-nowrap">{formatDate(order.date_created)}</td>
                               <td>{getStatusBadge(order.status)}</td>
+                              <td className="orders-amount">{formatCurrency(order.total_amount)}</td>
                               <td className="text-end">
-                                <span className="fw-bold text-success">{formatCurrency(order.total_amount)}</span>
-                              </td>
-                              <td className="text-center">
-                                <div className="d-flex gap-1 justify-content-center">
+                                <div className="orders-row-actions">
                                   <Button
+                                    className="orders-action-button"
                                     variant="outline-primary"
                                     size="sm"
                                     onClick={() => {
@@ -913,10 +932,12 @@ const Orders: React.FC = () => {
                                     }}
                                     aria-label={`View ${order.po_number}`}
                                   >
-                                    <i className="bi bi-eye"></i>
+                                    <i className="bi bi-eye me-1"></i>
+                                    View
                                   </Button>
                                   {order.status === 'Draft' && (
                                     <Button
+                                      className="orders-icon-button"
                                       variant="outline-success"
                                       size="sm"
                                       onClick={() => handleApprove(order.id as any)}
@@ -927,6 +948,7 @@ const Orders: React.FC = () => {
                                   )}
                                   {user?.is_admin && order.status === 'Draft' && (
                                     <Button
+                                      className="orders-icon-button"
                                       variant="outline-danger"
                                       size="sm"
                                       onClick={() => handleDelete(order.id as any)}
@@ -943,11 +965,12 @@ const Orders: React.FC = () => {
                       </Table>
                     </div>
                   ) : (
-                    <div className="text-center py-4">
-                      <i className="bi bi-cart text-muted" style={{ fontSize: '2rem' }}></i>
-                      <p className="text-muted mt-2">
+                    <div className="orders-empty-state">
+                      <i className="bi bi-cart"></i>
+                      <strong>
                         {searchTerm ? 'No orders found matching your search' : 'No purchase orders found'}
-                      </p>
+                      </strong>
+                      <span>Try clearing filters or creating a new order.</span>
                     </div>
                   )}
                 </Card.Body>

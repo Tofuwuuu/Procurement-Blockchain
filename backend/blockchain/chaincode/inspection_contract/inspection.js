@@ -18,6 +18,14 @@ class InspectionContract extends Contract {
         console.info('InspectionContract instantiated');
     }
 
+    getInspectionIdFromIndexKey(ctx, key, expectedObjectType) {
+        const parsedKey = ctx.stub.splitCompositeKey(key);
+        if (parsedKey.objectType !== expectedObjectType || parsedKey.attributes.length < 2) {
+            throw new Error(`Invalid ${expectedObjectType} index key: ${key}`);
+        }
+        return parsedKey.attributes[1];
+    }
+
     /**
      * Record an inspection result
      * This creates a new inspection record with timestamp and locks it
@@ -130,7 +138,7 @@ class InspectionContract extends Contract {
         
         let result = await iterator.next();
         while (!result.done) {
-            const inspectionId = result.value.key.split('\u0000')[1];
+            const inspectionId = this.getInspectionIdFromIndexKey(ctx, result.value.key, 'po~inspection');
             const inspection = await this.getInspection(ctx, inspectionId);
             results.push(inspection);
             result = await iterator.next();
@@ -176,7 +184,7 @@ class InspectionContract extends Contract {
         
         let result = await iterator.next();
         while (!result.done) {
-            const inspectionId = result.value.key.split('\u0000')[1];
+            const inspectionId = this.getInspectionIdFromIndexKey(ctx, result.value.key, 'inspector~inspection');
             const inspection = await this.getInspection(ctx, inspectionId);
             results.push(inspection);
             result = await iterator.next();
@@ -199,7 +207,7 @@ class InspectionContract extends Contract {
         
         let result = await iterator.next();
         while (!result.done) {
-            const inspectionId = result.value.key.split('\u0000')[1];
+            const inspectionId = this.getInspectionIdFromIndexKey(ctx, result.value.key, 'status~inspection');
             const inspection = await this.getInspection(ctx, inspectionId);
             results.push(inspection);
             result = await iterator.next();

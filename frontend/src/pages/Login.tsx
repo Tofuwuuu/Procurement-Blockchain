@@ -288,8 +288,8 @@ const Login: React.FC = () => {
                     </Form.Control.Feedback>
                   </Form.Group>
 
-                  {/* Remember Me and Forgot Password */}
-                  <div className="d-flex justify-content-between align-items-center mb-4">
+                  {/* Remember Me */}
+                  <div className="d-flex justify-content-start align-items-center mb-4">
                     <Form.Check
                       type="checkbox"
                       id="remember"
@@ -299,17 +299,6 @@ const Login: React.FC = () => {
                       disabled={loading}
                       className="ph-checkbox"
                     />
-                    <Button 
-                      variant="link" 
-                      className="p-0 text-decoration-none ph-link" 
-                      disabled={loading}
-                      onClick={() => {
-                        // TODO: Implement forgot password functionality
-                        alert('Forgot password functionality will be implemented soon.');
-                      }}
-                    >
-                      Forgot password?
-                    </Button>
                   </div>
 
                   {/* Submit Button */}
@@ -336,13 +325,6 @@ const Login: React.FC = () => {
                   </div>
                 </Form>
 
-                {/* Demo Credentials Info */}
-                <div className="text-center mt-4">
-                  <small className="text-muted">
-                    <i className="bi bi-info-circle me-1" aria-hidden="true"></i>
-                    Demo credentials: <code>admin</code> / <code>admin</code>
-                  </small>
-                </div>
               </Card.Body>
             </Card>
           </div>

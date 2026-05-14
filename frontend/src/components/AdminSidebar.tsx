@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Nav, Button } from 'react-bootstrap';
 import { Link, useLocation } from 'react-router-dom';
 import './AdminSidebar.css';
@@ -45,6 +45,15 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onToggle }) => {
             </Nav.Link>
             <Nav.Link 
               as={Link} 
+              to="/supplier-search" 
+              active={isActive('/supplier-search')}
+              className="sidebar-item"
+            >
+              <i className="bi bi-search me-2"></i>
+              Supplier Search
+            </Nav.Link>
+            <Nav.Link 
+              as={Link} 
               to="/abstract-of-canvass" 
               active={isActive('/abstract-of-canvass')}
               className="sidebar-item"
@@ -60,15 +69,6 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, onToggle }) => {
             >
               <i className="bi bi-cart me-2"></i>
               Purchase Order
-            </Nav.Link>
-            <Nav.Link 
-              as={Link} 
-              to="/supplier-search" 
-              active={isActive('/supplier-search')}
-              className="sidebar-item"
-            >
-              <i className="bi bi-search me-2"></i>
-              Supplier Search
             </Nav.Link>
           </div>
 

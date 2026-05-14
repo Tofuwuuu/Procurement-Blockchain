@@ -58,6 +58,102 @@ class CanvassSupplier(BaseModel):
     source: Optional[str] = None
     date_added: Optional[str] = None
 
+class SupplierCreate(BaseModel):
+    name: str
+    address: str
+    province: Optional[str] = ""
+    contact_person: str
+    phone: str
+    email: Optional[str] = None
+    bir_tin: str
+    is_active: bool = True
+
+class SupplierResponse(SupplierCreate):
+    id: int
+    created_at: str
+    updated_at: str
+
+class ProductSummary(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = ""
+    unit: str
+    unit_price: float
+    category: Optional[str] = ""
+    is_active: bool = True
+
+class PurchaseOrderItem(BaseModel):
+    id: Optional[int] = None
+    product_id: Optional[int] = None
+    product: Optional[ProductSummary] = None
+    quantity: int
+    unit_price: float
+    total_price: Optional[float] = None
+
+class CreatePurchaseOrder(BaseModel):
+    pr_id: Optional[str] = None
+    pr_number: Optional[str] = None
+    supplier_id: Optional[int] = None
+    delivery_address: Optional[str] = ""
+    notes: Optional[str] = ""
+    items: Optional[List[PurchaseOrderItem]] = None
+
+class UpdatePurchaseOrder(BaseModel):
+    supplier_id: Optional[int] = None
+    delivery_address: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    items: Optional[List[PurchaseOrderItem]] = None
+
+class PurchaseOrderResponse(BaseModel):
+    id: int
+    po_number: str
+    pr_number: Optional[str] = None
+    supplier_id: int
+    supplier: SupplierResponse
+    delivery_address: str
+    notes: Optional[str] = ""
+    status: str
+    total_amount: float
+    date_created: str
+    date_updated: str
+    items: List[PurchaseOrderItem]
+
+class CreateAbstractOfCanvass(BaseModel):
+    pr_id: Optional[str] = None
+    pr_number: Optional[str] = None
+    selected_supplier_id: str
+    remarks: Optional[str] = ""
+
+class AbstractOfCanvassResponse(BaseModel):
+    id: str
+    pr_number: str
+    selected_supplier_id: str
+    selected_supplier: Optional[CanvassSupplier] = None
+    suppliers: List[CanvassSupplier]
+    total_amount: float
+    status: str
+    remarks: Optional[str] = ""
+    awarded_by: Optional[str] = None
+    date_created: str
+    date_updated: Optional[str] = None
+
+class AuditLogResponse(BaseModel):
+    id: str
+    user_id: int = 0
+    username: str
+    action: str
+    entity: str
+    table_name: str
+    record_id: str
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    old_values: Optional[str] = None
+    new_values: Optional[str] = None
+    ip_address: Optional[str] = ""
+    user_agent: Optional[str] = ""
+    created_at: str
+
 # Purchase Request model (for creating)
 class CreatePurchaseRequest(BaseModel):
     entity_name: str

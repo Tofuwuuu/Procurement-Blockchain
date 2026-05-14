@@ -7,6 +7,7 @@ import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './PropertyAcknowledgementReceipt.css';
 
 interface PropertyItem {
   property_number: string;
@@ -42,6 +43,7 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [receipts, setReceipts] = useState<AcknowledgementReceipt[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Submitted' | 'Draft'>('All');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -116,90 +118,174 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
     });
   };
 
-  const filteredReceipts = receipts.filter(receipt =>
-    receipt.receipt_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    receipt.acknowledged_by.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    receipt.received_by.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getReceiptTotal = (receipt: AcknowledgementReceipt): number =>
+    receipt.items.reduce((sum, item) => sum + (item.total_value || 0), 0);
+
+  const submittedCount = receipts.filter((receipt) => receipt.status === 'Submitted').length;
+  const draftCount = receipts.filter((receipt) => receipt.status === 'Draft').length;
+  const totalItems = receipts.reduce((sum, receipt) => sum + receipt.items.length, 0);
+  const totalValue = receipts.reduce((sum, receipt) => sum + getReceiptTotal(receipt), 0);
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredReceipts = receipts.filter((receipt) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      receipt.receipt_number.toLowerCase().includes(normalizedSearch) ||
+      receipt.par_number.toLowerCase().includes(normalizedSearch) ||
+      receipt.po_number.toLowerCase().includes(normalizedSearch) ||
+      receipt.acknowledged_by.toLowerCase().includes(normalizedSearch) ||
+      receipt.received_by.toLowerCase().includes(normalizedSearch);
+
+    const matchesStatus = statusFilter === 'All' || receipt.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   if (loading) {
     return (
-      <Container className="py-4">
+      <Container className="py-4 par-page">
         <LoadingSpinner size="lg" text="Loading..." />
       </Container>
     );
   }
 
   return (
-    <Container className="py-4">
+    <Container fluid className="py-4 par-page">
       {/* Header */}
       <Row className="mb-4">
         <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h2 className="mb-1">Property Acknowledgement Receipt</h2>
-              <p className="text-muted mb-0">
-                Manage property acknowledgement receipts for assigned items
+          <div className="par-hero">
+            <div className="par-hero-copy">
+              <span className="par-eyebrow">Admin property desk</span>
+              <h2>Property Acknowledgement Receipt</h2>
+              <p>
+                Review assigned property, verify acknowledgement details, and prepare receipts for printing.
               </p>
+            </div>
+            <div className="par-admin-chip">
+              <i className="bi bi-person-badge"></i>
+              <div>
+                <span>Signed in as</span>
+                <strong>{user?.username || 'Admin'}</strong>
+              </div>
             </div>
           </div>
         </Col>
       </Row>
 
-      {/* Search */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <InputGroup>
-            <InputGroup.Text>
-              <i className="bi bi-search"></i>
-            </InputGroup.Text>
-            <Form.Control
-              type="text"
-              placeholder="Search by receipt number, acknowledged by, or received by..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </InputGroup>
+      <Row className="g-3 mb-4">
+        <Col md={3}>
+          <Card className="par-stat-card">
+            <Card.Body>
+              <span>Total receipts</span>
+              <strong>{receipts.length}</strong>
+              <small>{submittedCount} submitted</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="par-stat-card">
+            <Card.Body>
+              <span>Assigned items</span>
+              <strong>{totalItems}</strong>
+              <small>Across accepted inspections</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="par-stat-card">
+            <Card.Body>
+              <span>Total value</span>
+              <strong>{formatCurrency(totalValue)}</strong>
+              <small>For current receipt list</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={3}>
+          <Card className="par-stat-card">
+            <Card.Body>
+              <span>Needs review</span>
+              <strong>{draftCount}</strong>
+              <small>Draft acknowledgement receipts</small>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       {/* Receipts Table */}
-      <Card>
+      <Card className="par-table-card">
         <Card.Header>
-          <h5 className="mb-0">Acknowledgement Receipts</h5>
+          <div>
+            <h5>Acknowledgement Receipts</h5>
+            <p>{filteredReceipts.length} of {receipts.length} records shown</p>
+          </div>
+          <div className="par-toolbar">
+            <InputGroup className="par-search">
+              <InputGroup.Text>
+                <i className="bi bi-search"></i>
+              </InputGroup.Text>
+              <Form.Control
+                type="text"
+                placeholder="Search PAR, PO, acknowledgement, or receiver"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </InputGroup>
+            <Form.Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'All' | 'Submitted' | 'Draft')}
+              aria-label="Filter by status"
+            >
+              <option value="All">All statuses</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Draft">Draft</option>
+            </Form.Select>
+          </div>
         </Card.Header>
         <Card.Body className="p-0">
           {filteredReceipts.length > 0 ? (
             <div className="table-responsive">
-              <Table striped bordered hover className="mb-0">
+              <Table hover className="par-table mb-0">
                 <thead>
                   <tr>
                     <th>Receipt Number</th>
+                    <th>P.O. No.</th>
                     <th>Date</th>
                     <th>Acknowledged By</th>
                     <th>Received By</th>
-                    <th>Items Count</th>
+                    <th className="text-center">Items</th>
+                    <th className="text-end">Value</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th className="text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredReceipts.map((receipt) => (
                     <tr key={receipt.id || receipt.receipt_number}>
-                      <td><strong>{receipt.receipt_number || 'N/A'}</strong></td>
+                      <td>
+                        <strong className="par-number">{receipt.receipt_number || 'N/A'}</strong>
+                      </td>
+                      <td>{receipt.po_number}</td>
                       <td>{formatDate(receipt.date)}</td>
                       <td>{receipt.acknowledged_by}</td>
                       <td>{receipt.received_by}</td>
-                      <td>{receipt.items.length}</td>
+                      <td className="text-center">
+                        <span className="par-count-pill">{receipt.items.length}</span>
+                      </td>
+                      <td className="text-end">{formatCurrency(getReceiptTotal(receipt))}</td>
                       <td>
-                        <Badge bg={receipt.status === 'Submitted' ? 'success' : 'secondary'}>
+                        <Badge className={`par-status ${receipt.status === 'Submitted' ? 'is-submitted' : 'is-draft'}`}>
                           {receipt.status}
                         </Badge>
                       </td>
-                      <td>
-                        <Button variant="primary" size="sm" onClick={() => handleViewReceipt(receipt)}>
+                      <td className="text-end">
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          className="par-view-btn"
+                          onClick={() => handleViewReceipt(receipt)}
+                        >
                           <i className="bi bi-eye me-1"></i>
-                          View
+                          Review
                         </Button>
                       </td>
                     </tr>
@@ -208,12 +294,13 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
               </Table>
             </div>
           ) : (
-            <div className="text-center py-5">
-              <i className="bi bi-receipt text-muted" style={{ fontSize: '3rem' }}></i>
-              <p className="text-muted mt-3">
+            <div className="par-empty-state">
+              <i className="bi bi-receipt"></i>
+              <h5>No acknowledgement receipts found</h5>
+              <p>
                 {searchTerm 
-                  ? 'No receipts found matching your search' 
-                  : 'No property acknowledgement receipts found. Create a new one to get started.'}
+                  ? 'Try a different PAR number, purchase order, acknowledgement name, receiver, or status filter.'
+                  : 'Accepted inspection records will appear here as property acknowledgement receipts.'}
               </p>
             </div>
           )}
@@ -224,56 +311,86 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
       <Modal 
         show={showDetailModal} 
         onHide={() => setShowDetailModal(false)}
-        size="lg"
+        size="xl"
         centered
+        dialogClassName="par-detail-modal"
       >
         <Modal.Header closeButton>
-          <Modal.Title>Property Acknowledgement Receipt Details</Modal.Title>
+          <Modal.Title>
+            <span>Property Acknowledgement Receipt</span>
+            {selectedReceipt && <strong>{selectedReceipt.receipt_number}</strong>}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedReceipt && (
             <>
               {/* Header Info */}
-              <Row className="mb-4">
-                <Col md={6}>
-                  <Card className="mb-3">
-                    <Card.Body>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>PAR No.</strong></div>
-                        <div className="col-6">{selectedReceipt.par_number}</div>
-                      </div>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>PO No.</strong></div>
-                        <div className="col-6">{selectedReceipt.po_number}</div>
-                      </div>
-                      <div className="row">
-                        <div className="col-6"><strong>Date</strong></div>
-                        <div className="col-6">{formatDate(selectedReceipt.date)}</div>
-                      </div>
-                    </Card.Body>
-                  </Card>
+              <div className="par-document-heading">
+                <div>
+                  <span>Property acknowledgement record</span>
+                  <h3>{selectedReceipt.receipt_number}</h3>
+                </div>
+                <Badge className={`par-status ${selectedReceipt.status === 'Submitted' ? 'is-submitted' : 'is-draft'}`}>
+                  {selectedReceipt.status}
+                </Badge>
+              </div>
+
+              <Row className="g-3 mb-4">
+                <Col md={3}>
+                  <div className="par-detail-tile">
+                    <span>PAR No.</span>
+                    <strong>{selectedReceipt.par_number}</strong>
+                  </div>
                 </Col>
-                <Col md={6}>
-                  <Card className="mb-3">
-                    <Card.Body>
-                      <div className="row mb-2">
-                        <div className="col-6"><strong>Acknowledged By</strong></div>
-                        <div className="col-6">{selectedReceipt.acknowledged_by}</div>
-                      </div>
-                      <div className="row">
-                        <div className="col-6"><strong>Received By</strong></div>
-                        <div className="col-6">{selectedReceipt.received_by}</div>
-                      </div>
-                    </Card.Body>
-                  </Card>
+                <Col md={3}>
+                  <div className="par-detail-tile">
+                    <span>P.O. No.</span>
+                    <strong>{selectedReceipt.po_number}</strong>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="par-detail-tile">
+                    <span>Date</span>
+                    <strong>{formatDate(selectedReceipt.date)}</strong>
+                  </div>
+                </Col>
+                <Col md={3}>
+                  <div className="par-detail-tile">
+                    <span>Total Amount</span>
+                    <strong>{formatCurrency(getReceiptTotal(selectedReceipt))}</strong>
+                  </div>
+                </Col>
+              </Row>
+
+              <Row className="g-3 mb-4">
+                <Col md={4}>
+                  <div className="par-person-panel">
+                    <span>Acknowledged by</span>
+                    <strong>{selectedReceipt.acknowledged_by}</strong>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="par-person-panel">
+                    <span>Received by</span>
+                    <strong>{selectedReceipt.received_by}</strong>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="par-person-panel">
+                    <span>Position</span>
+                    <strong>{selectedReceipt.position || 'Custodian'}</strong>
+                  </div>
                 </Col>
               </Row>
 
               {/* Items Section */}
-              <h6 className="fw-bold mb-3">Property Items</h6>
+              <div className="par-section-title">
+                <h6>Property Items</h6>
+                <span>{selectedReceipt.items.length} item{selectedReceipt.items.length === 1 ? '' : 's'}</span>
+              </div>
               <div className="table-responsive mb-4">
-                <Table bordered striped size="sm">
-                  <thead className="bg-light">
+                <Table size="sm" className="par-detail-table">
+                  <thead>
                     <tr>
                       <th>Property No.</th>
                       <th>Description</th>
@@ -292,7 +409,7 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
                         <td>{item.quantity}</td>
                         <td>{item.unit}</td>
                         <td>{formatCurrency(item.unit_value)}</td>
-                        <td>{formatCurrency(item.total_value)}</td>
+                        <td className="text-end">{formatCurrency(item.total_value)}</td>
                         <td>{item.condition}</td>
                       </tr>
                     ))}
@@ -302,9 +419,9 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
 
               {/* Remarks */}
               {selectedReceipt.remarks && (
-                <div className="mb-3">
-                  <strong>Remarks:</strong>
-                  <p className="mb-0">{selectedReceipt.remarks}</p>
+                <div className="par-remarks">
+                  <h6>Remarks</h6>
+                  <p>{selectedReceipt.remarks}</p>
                 </div>
               )}
             </>
@@ -314,7 +431,7 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
           <Button variant="secondary" onClick={() => setShowDetailModal(false)}>
             Close
           </Button>
-          <Button variant="primary">
+          <Button variant="primary" className="par-print-btn" onClick={() => window.print()}>
             <i className="bi bi-printer me-2"></i>
             Print
           </Button>

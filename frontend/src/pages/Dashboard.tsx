@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Table, Badge, Button } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService, DashboardStats, RecentOrder } from '../services/api';
-import { mockDashboardStats } from '../services/mockData';
 import CardStat from '../components/CardStat';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
@@ -28,25 +27,12 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Try /api/stats first, fallback to /chain, then mock data
-      let data: DashboardStats;
-      try {
-        data = await apiService.getDashboardStats();
-      } catch (statsError) {
-        console.log('Stats endpoint not available, trying chain endpoint...');
-        try {
-          data = await apiService.getChain();
-        } catch (chainError) {
-          console.log('Chain endpoint not available, using mock data...');
-          data = mockDashboardStats;
-        }
-      }
-      
+      const data = await apiService.getDashboardStats();
       setStats(data);
     } catch (err) {
-      console.log('All API endpoints failed, using mock data...');
-      setStats(mockDashboardStats);
-      // No toast notification needed
+      console.error('Failed to load dashboard data:', err);
+      setStats(null);
+      setError('Dashboard statistics are coming soon. The backend endpoint is not available yet.');
     } finally {
       setLoading(false);
     }

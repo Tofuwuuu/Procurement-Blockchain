@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Table, Card, Badge, Button, Modal, Form, Row, Col, InputGroup } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService, PurchaseRequest } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './PurchaseRequestCanvasser.css';
 
 /**
  * Purchase Request list for canvassers (and admins if needed).
@@ -21,6 +22,8 @@ const PurchaseRequestCanvasser: React.FC = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
   const [updateRemark, setUpdateRemark] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [formData, setFormData] = useState({
     entity_name: user?.full_name || user?.username || '',
     fund_cluster: '',
@@ -58,15 +61,18 @@ const PurchaseRequestCanvasser: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { variant: string; text: string }> = {
-      Pending: { variant: 'warning', text: 'Pending' },
-      Approved: { variant: 'success', text: 'Approved' },
-      Draft: { variant: 'secondary', text: 'Draft' },
-      Completed: { variant: 'primary', text: 'Completed' },
+    const statusConfig: Record<string, { className: string; text: string }> = {
+      Pending: { className: 'pr-status-badge pr-status-pending', text: 'Pending' },
+      Approved: { className: 'pr-status-badge pr-status-approved', text: 'Approved' },
+      Draft: { className: 'pr-status-badge pr-status-draft', text: 'Draft' },
+      Completed: { className: 'pr-status-badge pr-status-completed', text: 'Completed' },
     };
-    const config = statusConfig[status] || { variant: 'secondary', text: status };
-    return <Badge bg={config.variant}>{config.text}</Badge>;
+    const config = statusConfig[status] || { className: 'pr-status-badge pr-status-draft', text: status };
+    return <Badge className={config.className}>{config.text}</Badge>;
   };
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-PH', {
@@ -75,6 +81,42 @@ const PurchaseRequestCanvasser: React.FC = () => {
       day: 'numeric',
     });
   };
+
+  const requestStats = useMemo(() => {
+    const totalAmount = requests.reduce((sum, req) => sum + (req.total_amount || 0), 0);
+    return {
+      total: requests.length,
+      pending: requests.filter((req) => req.status === 'Pending').length,
+      approved: requests.filter((req) => req.status === 'Approved').length,
+      completed: requests.filter((req) => req.status === 'Completed').length,
+      totalAmount,
+    };
+  }, [requests]);
+
+  const statusOptions = useMemo(
+    () => ['All', ...Array.from(new Set(requests.map((req) => req.status).filter(Boolean)))],
+    [requests]
+  );
+
+  const filteredRequests = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return requests.filter((req) => {
+      const matchesStatus = statusFilter === 'All' || req.status === statusFilter;
+      const searchableText = [
+        req.pr_number,
+        req.requested_by,
+        req.entity_name,
+        req.office_section,
+        req.remark,
+        req.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return matchesStatus && (!normalizedSearch || searchableText.includes(normalizedSearch));
+    });
+  }, [requests, searchTerm, statusFilter]);
 
   const handleItemChange = (index: number, field: string, value: any) => {
     const items = [...formData.items];
@@ -182,40 +224,106 @@ const PurchaseRequestCanvasser: React.FC = () => {
 
   if (loading) {
     return (
-      <Container className="py-4">
+      <Container fluid className="purchase-request-page py-4">
         <LoadingSpinner size="lg" text="Loading purchase requests..." />
       </Container>
     );
   }
 
   return (
-    <Container className="py-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
+    <Container fluid className="purchase-request-page py-4">
+      <div className="pr-page-header">
         <div>
+          <div className="pr-eyebrow">Procurement Queue</div>
           <h2 className="mb-1">Purchase Requests</h2>
-          <p className="text-muted mb-0">
+          <p className="pr-page-subtitle mb-0">
             {user?.role === 'canvasser'
-              ? 'Review purchase requests for canvassing.'
-              : 'Admin view of purchase requests.'}
+              ? 'Review incoming requests, prepare them for supplier search, and approve them for canvassing.'
+              : 'Monitor request volume, status, and next actions across procurement.'}
           </p>
         </div>
-        <div className="d-flex gap-2">
-          <Button variant="outline-primary" size="sm" onClick={loadRequests}>
+        <div className="pr-header-actions">
+          <Button variant="outline-primary" onClick={loadRequests}>
             <i className="bi bi-arrow-clockwise me-2"></i>
             Refresh
           </Button>
-          <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
+          <Button variant="primary" onClick={() => setShowModal(true)}>
             <i className="bi bi-plus-circle me-2"></i>
             New Request
           </Button>
         </div>
       </div>
 
-      <Card>
+      <Row className="g-3 mb-3">
+        <Col sm={6} lg={3}>
+          <Card className="pr-stat-card">
+            <Card.Body>
+              <span className="pr-stat-label">Total Requests</span>
+              <strong>{requestStats.total}</strong>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col sm={6} lg={3}>
+          <Card className="pr-stat-card accent-warning">
+            <Card.Body>
+              <span className="pr-stat-label">Pending</span>
+              <strong>{requestStats.pending}</strong>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col sm={6} lg={3}>
+          <Card className="pr-stat-card accent-success">
+            <Card.Body>
+              <span className="pr-stat-label">Approved</span>
+              <strong>{requestStats.approved}</strong>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col sm={6} lg={3}>
+          <Card className="pr-stat-card accent-primary">
+            <Card.Body>
+              <span className="pr-stat-label">Total Value</span>
+              <strong>{formatCurrency(requestStats.totalAmount)}</strong>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      <Card className="pr-list-card">
         <Card.Body className="p-0">
+          <div className="pr-list-toolbar">
+            <div>
+              <h5 className="mb-1">Request Register</h5>
+              <span>{filteredRequests.length} of {requests.length} requests shown</span>
+            </div>
+            <div className="pr-list-controls">
+              <InputGroup className="pr-search-control">
+                <InputGroup.Text>
+                  <i className="bi bi-search"></i>
+                </InputGroup.Text>
+                <Form.Control
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search PR number, requester, office..."
+                />
+              </InputGroup>
+              <Form.Select
+                className="pr-status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="Filter by status"
+              >
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status === 'All' ? 'All statuses' : status}
+                  </option>
+                ))}
+              </Form.Select>
+            </div>
+          </div>
           <div className="table-responsive">
-            <Table striped bordered hover className="mb-0">
-              <thead className="bg-light">
+            <Table hover className="pr-table mb-0">
+              <thead>
                 <tr>
                   <th>Status</th>
                   <th>P.R. Number</th>
@@ -228,35 +336,34 @@ const PurchaseRequestCanvasser: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {requests.length === 0 ? (
+                {filteredRequests.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center text-muted py-4">
-                      No purchase requests found
+                    <td colSpan={8} className="pr-empty-state">
+                      <i className="bi bi-inbox"></i>
+                      <strong>No purchase requests found</strong>
+                      <span>Try clearing the search or changing the status filter.</span>
                     </td>
                   </tr>
                 ) : (
-                  requests.map((req) => (
+                  filteredRequests.map((req) => (
                     <tr key={req.id}>
                       <td>{getStatusBadge(req.status)}</td>
-                      <td className="fw-semibold">{req.pr_number}</td>
+                      <td className="fw-semibold text-nowrap">{req.pr_number}</td>
                       <td>{req.requested_by || req.entity_name}</td>
                       <td>{req.office_section}</td>
-                      <td>{formatDate(req.date_created)}</td>
-                      <td>
-                        {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(
-                          req.total_amount || 0
-                        )}
-                      </td>
-                      <td>{req.remark || 'No remarks'}</td>
-                      <td className="text-center">
+                      <td className="text-nowrap">{formatDate(req.date_created)}</td>
+                      <td className="pr-amount">{formatCurrency(req.total_amount || 0)}</td>
+                      <td className="pr-remark">{req.remark || 'No remarks'}</td>
+                      <td className="text-end">
                         <Button
+                          className="pr-row-action"
                           variant="outline-primary"
                           size="sm"
                           onClick={() => openUpdateModal(req)}
                           disabled={req.status?.toLowerCase() === 'approved'}
                         >
                           <i className="bi bi-journal-text me-1"></i>
-                          Update
+                          Review
                         </Button>
                       </td>
                     </tr>
@@ -269,10 +376,13 @@ const PurchaseRequestCanvasser: React.FC = () => {
       </Card>
 
       {/* Create Purchase Request Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered className="pr-modal">
         <Form onSubmit={handleSubmit}>
           <Modal.Header closeButton>
-            <Modal.Title>New Purchase Request</Modal.Title>
+            <Modal.Title>
+              <span>New Purchase Request</span>
+              <small>Create a request with itemized estimated costs.</small>
+            </Modal.Title>
           </Modal.Header>
           <Modal.Body>
             <Row className="mb-3">
@@ -332,7 +442,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
             </Row>
 
             <div className="d-flex justify-content-between align-items-center mb-2">
-              <h6 className="mb-0">Items</h6>
+              <h6 className="mb-0">Requested Items</h6>
               <Button variant="outline-primary" size="sm" onClick={addItemRow}>
                 <i className="bi bi-plus-circle me-1"></i>
                 Add Item
@@ -340,7 +450,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
             </div>
             {errors.items && <div className="text-danger mb-2">{errors.items}</div>}
             <div className="table-responsive">
-              <Table size="sm" bordered>
+              <Table size="sm" className="pr-form-table">
                 <thead>
                   <tr>
                     <th style={{ width: '10%' }}>Unit</th>
@@ -376,7 +486,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
                       </td>
                       <td>
                         <InputGroup>
-                          <InputGroup.Text>₱</InputGroup.Text>
+                          <InputGroup.Text>PHP</InputGroup.Text>
                           <Form.Control
                             type="number"
                             min={0}
@@ -388,7 +498,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
                       </td>
                       <td>
                         <InputGroup>
-                          <InputGroup.Text>₱</InputGroup.Text>
+                          <InputGroup.Text>PHP</InputGroup.Text>
                           <Form.Control
                             type="number"
                             min={0}
@@ -433,7 +543,7 @@ const PurchaseRequestCanvasser: React.FC = () => {
       />
 
       {/* Update Purchase Request Modal */}
-      <Modal show={showUpdateModal} onHide={() => setShowUpdateModal(false)} size="lg" centered>
+      <Modal show={showUpdateModal} onHide={() => setShowUpdateModal(false)} size="lg" centered className="pr-modal">
         <Form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -460,14 +570,31 @@ const PurchaseRequestCanvasser: React.FC = () => {
           }}
         >
           <Modal.Header closeButton>
-            <Modal.Title>Update Purchase Request</Modal.Title>
+            <Modal.Title>
+              <span>Review Purchase Request</span>
+              <small>Confirm details before moving this request forward.</small>
+            </Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {selectedRequest ? (
               <>
+                <div className="pr-review-summary mb-3">
+                  <div>
+                    <span>P.R. Number</span>
+                    <strong>{selectedRequest.pr_number}</strong>
+                  </div>
+                  <div>
+                    <span>Requester</span>
+                    <strong>{selectedRequest.requested_by || selectedRequest.entity_name}</strong>
+                  </div>
+                  <div>
+                    <span>Total Amount</span>
+                    <strong>{formatCurrency(selectedRequest.total_amount || 0)}</strong>
+                  </div>
+                </div>
                 <h6 className="mb-3">List of Items</h6>
                 <div className="table-responsive">
-                  <Table bordered>
+                  <Table className="pr-form-table">
                     <thead>
                       <tr>
                         <th>Unit</th>
@@ -483,8 +610,8 @@ const PurchaseRequestCanvasser: React.FC = () => {
                           <td>{item.unit}</td>
                           <td>{item.item_description}</td>
                           <td>{item.quantity}</td>
-                          <td>{item.unit_cost}</td>
-                          <td>{item.total_cost}</td>
+                          <td>{formatCurrency(item.unit_cost)}</td>
+                          <td>{formatCurrency(item.total_cost)}</td>
                         </tr>
                       ))}
                     </tbody>

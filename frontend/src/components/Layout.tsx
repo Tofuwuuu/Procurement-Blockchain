@@ -304,6 +304,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
                     <Nav.Link 
                       as={Link} 
+                      to="/supplier-search" 
+                      active={isActive('/supplier-search')}
+                      className="d-flex align-items-center nav-item-custom"
+                    >
+                      <i className="bi bi-search me-2"></i>
+                      Supplier Search
+                    </Nav.Link>
+
+                    <Nav.Link 
+                      as={Link} 
                       to="/abstract-of-canvass" 
                       active={isActive('/abstract-of-canvass')}
                       className="d-flex align-items-center nav-item-custom"
@@ -320,16 +330,6 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                     >
                       <i className="bi bi-cart me-2"></i>
                       Purchase Order
-                    </Nav.Link>
-
-                    <Nav.Link 
-                      as={Link} 
-                      to="/supplier-search" 
-                      active={isActive('/supplier-search')}
-                      className="d-flex align-items-center nav-item-custom"
-                    >
-                      <i className="bi bi-search me-2"></i>
-                      Supplier Search
                     </Nav.Link>
                   </>
                 )}
