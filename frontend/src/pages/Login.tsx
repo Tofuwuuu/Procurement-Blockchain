@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, InputGroup } from 'react-bootstrap';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Card, Col, Container, Form, InputGroup, Row } from 'react-bootstrap';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -19,37 +19,23 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
-  
+
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
     password: ''
   });
-  
-  // Debug form data changes
-  useEffect(() => {
-    console.log('📊 Form data changed:', formData);
-  }, [formData]);
   const [errors, setErrors] = useState<LoginErrors>({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // Redirect if already authenticated
   useEffect(() => {
-    console.log('🔄 Login component useEffect triggered');
-    console.log('🔐 isAuthenticated:', isAuthenticated);
-    console.log('⏳ authLoading:', authLoading);
-    
     if (isAuthenticated && !authLoading) {
       const from = location.state?.from?.pathname || '/dashboard';
-      console.log('🎯 User is authenticated, redirecting to:', from);
       navigate(from, { replace: true });
-    } else {
-      console.log('⏸️ Not redirecting - isAuthenticated:', isAuthenticated, 'authLoading:', authLoading);
     }
   }, [isAuthenticated, authLoading, navigate, location]);
 
-  // Clear errors when form data changes
   useEffect(() => {
     if (errors.username && formData.username) {
       setErrors(prev => ({ ...prev, username: undefined }));
@@ -57,93 +43,45 @@ const Login: React.FC = () => {
     if (errors.password && formData.password) {
       setErrors(prev => ({ ...prev, password: undefined }));
     }
-  }, [formData, errors]);
+  }, [formData, errors.username, errors.password]);
 
   const validateForm = (): boolean => {
-    console.log('🔍 Starting form validation...');
-    console.log('📝 Username:', formData.username, 'Length:', formData.username?.length);
-    console.log('🔑 Password:', formData.password ? '***' : 'empty', 'Length:', formData.password?.length);
-    
     const newErrors: LoginErrors = {};
 
-    // Username validation
     if (!formData.username.trim()) {
       newErrors.username = 'Username is required';
-      console.log('❌ Username validation failed: empty');
     } else if (formData.username.trim().length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
-      console.log('❌ Username validation failed: too short');
-    } else {
-      console.log('✅ Username validation passed');
     }
 
-    // Password validation
     if (!formData.password) {
       newErrors.password = 'Password is required';
-      console.log('❌ Password validation failed: empty');
     } else if (formData.password.length < 5) {
       newErrors.password = 'Password must be at least 5 characters';
-      console.log('❌ Password validation failed: too short');
-    } else {
-      console.log('✅ Password validation passed');
     }
 
-    console.log('📊 Validation errors:', newErrors);
     setErrors(newErrors);
-    const isValid = Object.keys(newErrors).length === 0;
-    console.log('🎯 Form validation result:', isValid);
-    return isValid;
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleInputChange = (field: keyof LoginFormData, value: string) => {
-    console.log('📝 Input change:', field, 'Value:', value, 'Length:', value?.length);
-    setFormData(prev => {
-      const newData = { ...prev, [field]: value };
-      console.log('🔄 Updated form data:', newData);
-      return newData;
-    });
-    
-    // Clear field-specific error when user starts typing
+    setFormData(prev => ({ ...prev, [field]: value }));
+
     if (errors[field]) {
-      console.log('🧹 Clearing error for:', field);
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    console.log('📝 Login form submitted');
-    console.log('🔑 Form data:', { username: formData.username, password: formData.password ? '***' : 'empty' });
-    
-    if (!validateForm()) {
-      console.log('❌ Form validation failed');
-      return;
-    }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!validateForm()) return;
 
     try {
-      console.log('🚀 Starting login process...');
       setLoading(true);
       setErrors({});
-
-      // Call the login function from AuthContext
-      console.log('📡 Calling AuthContext.login...');
       await login(formData.username.trim(), formData.password);
-      console.log('✅ AuthContext.login completed successfully');
-      
-      // If remember me is checked, we could implement additional logic here
-      if (rememberMe) {
-        // Could set a longer token expiration or additional storage
-        console.log('💾 Remember me enabled');
-      }
-
-      console.log('🎯 Login successful, should redirect to dashboard');
-      // Navigation will be handled by the useEffect above
-      
     } catch (error: any) {
-      console.error('❌ Login error in component:', error);
-      
-      // Handle different types of errors
       if (error.response?.status === 401) {
         setErrors({ general: 'Invalid username or password. Please check your credentials.' });
       } else if (error.response?.status === 400) {
@@ -156,164 +94,180 @@ const Login: React.FC = () => {
         setErrors({ general: 'Login failed. Please try again.' });
       }
     } finally {
-      console.log('🏁 Login process completed, setting loading to false');
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !loading) {
-      handleSubmit(e);
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !loading) {
+      handleSubmit(event);
     }
   };
 
-  // Show loading spinner while checking authentication
   if (authLoading) {
     return (
-      <Container className="login-container">
-        <Row className="justify-content-center align-items-center">
-          <Col xs={12} sm={8} md={6} lg={5} xl={4}>
-            <div className="text-center">
-              <LoadingSpinner size="lg" text="Checking authentication..." />
-            </div>
-          </Col>
-        </Row>
-      </Container>
+      <main className="login-container">
+        <div className="login-loading">
+          <LoadingSpinner size="lg" text="Checking authentication..." />
+        </div>
+      </main>
     );
   }
 
   return (
-    <Container className="login-container">
-      <Row className="justify-content-center align-items-center">
-        <Col xs={12} sm={8} md={6} lg={5} xl={4}>
-          <div className="ph-login-wrapper">
-            <Card className="ph-login-card shadow-lg">
-              {/* Philippine Flag Strip */}
-              <div className="ph-flag-strip">
-                <div className="ph-flag-blue"></div>
-                <div className="ph-flag-red"></div>
-                <div className="ph-flag-yellow"></div>
+    <main className="login-container">
+      <Container fluid className="login-shell">
+        <Row className="login-grid g-0">
+          <Col lg={6} className="login-brand-panel">
+            <div className="login-brand-content">
+              <div className="login-brand-mark">
+                <i className="bi bi-shield-check" aria-hidden="true"></i>
+                <span>PAMS</span>
               </div>
-              
-              <Card.Body className="p-4 p-md-5">
-                {/* Logo and Branding */}
-                <div className="text-center mb-4">
-                  <div className="ph-logo-container mb-3">
-                    <i className="bi bi-shield-check ph-logo-icon" aria-hidden="true"></i>
-                  </div>
-                  <h1 className="company-title mb-2">PAMS</h1>
-                  <p className="text-muted mb-0 ph-subtitle">
-                    Philippine-Compliant Procurement Management
-                  </p>
+              <h1>Procurement control for every approval, receipt, and payment.</h1>
+              <p>
+                A Philippine-compliant procurement workspace built for accountable public-sector purchasing.
+              </p>
+              <div className="login-brand-metrics" aria-label="System highlights">
+                <div>
+                  <strong>PR</strong>
+                  <span>approval trail</span>
                 </div>
+                <div>
+                  <strong>PO</strong>
+                  <span>issuance tracking</span>
+                </div>
+                <div>
+                  <strong>BC</strong>
+                  <span>ledger records</span>
+                </div>
+              </div>
+            </div>
+          </Col>
 
-                <h2 className="card-title text-center mb-4 fw-bold">Login to Your Account</h2>
-
-                {/* Error Alert */}
-                {errors.general && (
-                  <Alert 
-                    variant="danger" 
-                    dismissible 
-                    onClose={() => setErrors(prev => ({ ...prev, general: undefined }))} 
-                    className="ph-alert"
-                    role="alert"
-                  >
-                    <i className="bi bi-exclamation-triangle me-2" aria-hidden="true"></i>
-                    {errors.general}
-                  </Alert>
-                )}
-
-                {/* Login Form */}
-                <Form onSubmit={handleSubmit} className="ph-form" noValidate>
-                  <Form.Group className="mb-3">
-                    <Form.Label htmlFor="username" className="ph-form-label">
-                      <i className="bi bi-person-fill me-2" aria-hidden="true"></i>
-                      Username
-                    </Form.Label>
-                    <Form.Control
-                      id="username"
-                      type="text"
-                      placeholder="Enter your username"
-                      value={formData.username}
-                      onChange={(e) => handleInputChange('username', e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      isInvalid={!!errors.username}
-                      aria-describedby={errors.username ? "usernameError" : undefined}
-                      disabled={loading}
-                      autoComplete="username"
-                      className="ph-form-control"
-                      aria-required="true"
-                    />
-                    <Form.Control.Feedback type="invalid" id="usernameError">
-                      <i className="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-                      {errors.username}
-                    </Form.Control.Feedback>
-                  </Form.Group>
-
-                  <Form.Group className="mb-3">
-                    <Form.Label htmlFor="password" className="ph-form-label">
-                      <i className="bi bi-lock-fill me-2" aria-hidden="true"></i>
-                      Password
-                    </Form.Label>
-                    <InputGroup className="ph-input-group">
-                      <Form.Control
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Enter your password"
-                        value={formData.password}
-                        onChange={(e) => handleInputChange('password', e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        isInvalid={!!errors.password}
-                        aria-describedby={errors.password ? "passwordError" : undefined}
-                        disabled={loading}
-                        autoComplete="current-password"
-                        className="ph-form-control"
-                        aria-required="true"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline-secondary"
-                        className="ph-password-toggle"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        disabled={loading}
-                        tabIndex={-1}
-                      >
-                        <i className={showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'} aria-hidden="true"></i>
-                      </Button>
-                    </InputGroup>
-                    <Form.Control.Feedback type="invalid" id="passwordError">
-                      <i className="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
-                      {errors.password}
-                    </Form.Control.Feedback>
-                  </Form.Group>
-
-                  {/* Remember Me */}
-                  <div className="d-flex justify-content-start align-items-center mb-4">
-                    <Form.Check
-                      type="checkbox"
-                      id="remember"
-                      label="Remember me"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      disabled={loading}
-                      className="ph-checkbox"
-                    />
+          <Col lg={6} className="login-form-panel">
+            <div className="ph-login-wrapper">
+              <Card className="ph-login-card">
+                <Card.Body>
+                  <div className="login-card-header">
+                    <div className="ph-logo-container">
+                      <i className="bi bi-shield-lock ph-logo-icon" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                      <div className="login-eyebrow">Secure access</div>
+                      <h2>Sign in to PAMS</h2>
+                      <p>Use your assigned account to continue.</p>
+                    </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="d-grid">
-                    <Button 
-                      type="submit" 
-                      className="ph-btn-primary" 
+                  {errors.general && (
+                    <Alert
+                      variant="danger"
+                      dismissible
+                      onClose={() => setErrors(prev => ({ ...prev, general: undefined }))}
+                      className="ph-alert"
+                      role="alert"
+                    >
+                      <i className="bi bi-exclamation-triangle me-2" aria-hidden="true"></i>
+                      {errors.general}
+                    </Alert>
+                  )}
+
+                  <Form onSubmit={handleSubmit} className="ph-form" noValidate>
+                    <Form.Group className="mb-3">
+                      <Form.Label htmlFor="username" className="ph-form-label">
+                        Username
+                      </Form.Label>
+                      <InputGroup className="ph-input-group">
+                        <InputGroup.Text>
+                          <i className="bi bi-person" aria-hidden="true"></i>
+                        </InputGroup.Text>
+                        <Form.Control
+                          id="username"
+                          type="text"
+                          placeholder="Enter your username"
+                          value={formData.username}
+                          onChange={(event) => handleInputChange('username', event.target.value)}
+                          onKeyDown={handleKeyDown}
+                          isInvalid={!!errors.username}
+                          aria-describedby={errors.username ? 'usernameError' : undefined}
+                          disabled={loading}
+                          autoComplete="username"
+                          className="ph-form-control"
+                          aria-required="true"
+                        />
+                      </InputGroup>
+                      {errors.username && (
+                        <div className="login-field-error" id="usernameError">
+                          <i className="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                          {errors.username}
+                        </div>
+                      )}
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label htmlFor="password" className="ph-form-label">
+                        Password
+                      </Form.Label>
+                      <InputGroup className="ph-input-group">
+                        <InputGroup.Text>
+                          <i className="bi bi-lock" aria-hidden="true"></i>
+                        </InputGroup.Text>
+                        <Form.Control
+                          id="password"
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="Enter your password"
+                          value={formData.password}
+                          onChange={(event) => handleInputChange('password', event.target.value)}
+                          onKeyDown={handleKeyDown}
+                          isInvalid={!!errors.password}
+                          aria-describedby={errors.password ? 'passwordError' : undefined}
+                          disabled={loading}
+                          autoComplete="current-password"
+                          className="ph-form-control"
+                          aria-required="true"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline-secondary"
+                          className="ph-password-toggle"
+                          onClick={() => setShowPassword(prev => !prev)}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          disabled={loading}
+                        >
+                          <i className={showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'} aria-hidden="true"></i>
+                        </Button>
+                      </InputGroup>
+                      {errors.password && (
+                        <div className="login-field-error" id="passwordError">
+                          <i className="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                          {errors.password}
+                        </div>
+                      )}
+                    </Form.Group>
+
+                    <div className="login-form-options">
+                      <Form.Check
+                        type="checkbox"
+                        id="remember"
+                        label="Keep me signed in"
+                        checked={rememberMe}
+                        onChange={(event) => setRememberMe(event.target.checked)}
+                        disabled={loading}
+                        className="ph-checkbox"
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="ph-btn-primary"
                       disabled={loading}
                       aria-label="Sign in to account"
-                      size="lg"
                     >
                       {loading ? (
                         <>
                           <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                          Signing in...
+                          Signing in
                         </>
                       ) : (
                         <>
@@ -322,27 +276,25 @@ const Login: React.FC = () => {
                         </>
                       )}
                     </Button>
-                  </div>
-                </Form>
+                  </Form>
+                </Card.Body>
+              </Card>
 
-              </Card.Body>
-            </Card>
-          </div>
-
-          {/* Footer Information */}
-          <div className="text-center mt-4 ph-footer-info">
-            <div className="mb-2">
-              <i className="bi bi-geo-alt-fill me-2" aria-hidden="true"></i>
-              <span>Market Road, Maduya, Carmona, Cavite, 4116, Philippines</span>
+              <div className="ph-footer-info">
+                <div>
+                  <i className="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                  <span>Market Road, Maduya, Carmona, Cavite, 4116, Philippines</span>
+                </div>
+                <div>
+                  <i className="bi bi-card-text" aria-hidden="true"></i>
+                  <span>BIR TIN: 123-456-789-000</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <i className="bi bi-card-text me-2" aria-hidden="true"></i>
-              <span>BIR TIN: 123-456-789-000</span>
-            </div>
-          </div>
-        </Col>
-      </Row>
-    </Container>
+          </Col>
+        </Row>
+      </Container>
+    </main>
   );
 };
 

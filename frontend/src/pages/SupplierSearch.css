@@ -258,6 +258,42 @@
   font-weight: 700;
 }
 
+.supplier-name-cell span,
+.supplier-name-cell small,
+.supplier-source-cell span,
+.supplier-confidence {
+  display: block;
+}
+
+.supplier-name-cell small,
+.supplier-source-cell span,
+.supplier-confidence {
+  color: #66766b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 0.25rem;
+}
+
+.supplier-source-badge,
+.supplier-quality-badge {
+  border-radius: 999px;
+  box-shadow: none;
+  font-size: 0.72rem;
+}
+
+.supplier-source-badge.supported,
+.supplier-quality-badge.review {
+  background: #eaf6ed !important;
+  color: #1b5e20 !important;
+}
+
+.supplier-source-badge.unsupported,
+.supplier-quality-badge.blocked {
+  background: #fef2f2 !important;
+  color: #b42318 !important;
+}
+
 .supplier-price-cell {
   color: #0f3d18 !important;
   font-weight: 800;

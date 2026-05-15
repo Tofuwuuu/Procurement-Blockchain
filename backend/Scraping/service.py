@@ -6,7 +6,7 @@ from datetime import datetime
 # Add parent directory to path to import database module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import get_database
-from scraper import scrape_supplier_from_url, search_public_suppliers
+from scraper import scrape_supplier_from_url, search_public_suppliers, enrich_supplier_quality
 
 async def save_suppliers_to_db(suppliers: List[Dict]) -> List[Dict]:
     """Save scraped suppliers to MongoDB"""
@@ -71,6 +71,7 @@ async def get_suppliers_from_db(
             result["id"] = str(result["_id"])
             # Add 'no' field for frontend
             result["no"] = results.index(result) + 1
+            enrich_supplier_quality(result)
         
         return results
     except Exception as e:

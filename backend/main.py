@@ -14,9 +14,13 @@ from models import (
     PendingInspection, CreatePropertyReturnSlip, PropertyReturnSlipResponse,
     CreateWasteMaterialsReport, WasteMaterialsReportResponse,
     SupplierCreate, SupplierResponse, CreatePurchaseOrder, UpdatePurchaseOrder, PurchaseOrderResponse,
-    CreateAbstractOfCanvass, AbstractOfCanvassResponse
+    CreateAbstractOfCanvass, AbstractOfCanvassResponse,
+    CreateDeliveryReceipt, UpdateDeliveryReceipt, DeliveryReceiptResponse,
+    CreateInvoice, UpdateInvoice, InvoiceResponse,
+    CreatePayment, UpdatePayment, PaymentResponse, DisbursementVoucherResponse
 )
 from auth import verify_password, create_access_token, decode_access_token
+from workflow_config import ApprovalMatrix, ApprovalStage, PRStatus, WorkflowTransitions
 from datetime import datetime, timezone
 from typing import List
 import socket
@@ -242,17 +246,25 @@ async def get_authenticated_user_context(credentials: HTTPAuthorizationCredentia
     db = await get_database()
     user = await db.users.find_one({"username": payload.get("sub")})
     user_id = 0
+    role_name = payload.get("role") or "employee"
     if user:
         raw_user_id = user.get("id") or user.get("_id") or payload.get("sub")
         try:
             user_id = int(raw_user_id)
         except Exception:
             user_id = abs(hash(str(raw_user_id))) % 2147483647
+        role_name = user.get("role") or role_name
+        role_id = user.get("role_id")
+        if role_id:
+            role_doc = await db.roles.find_one({"id": role_id} if isinstance(role_id, int) else {"_id": role_id})
+            if role_doc:
+                role_name = role_doc.get("name", role_name)
 
     return {
         "payload": payload,
         "username": payload.get("sub") or "unknown",
         "user_id": user_id,
+        "role": str(role_name or "employee").lower(),
         "user": user
     }
 
@@ -268,6 +280,111 @@ def mark_status_change_audit(request: Request, user_context: dict, entity: str, 
         "old_status": old_status,
         "new_status": new_status
     }
+
+def role_allowed(user_context: dict, allowed_roles: List[str]) -> bool:
+    role = str(user_context.get("role", "")).lower()
+    return role in [allowed.lower() for allowed in allowed_roles]
+
+def require_role(user_context: dict, allowed_roles: List[str], action: str):
+    if not role_allowed(user_context, allowed_roles):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"{action} requires one of these roles: {', '.join(allowed_roles)}"
+        )
+
+def require_department_head_approval(user_context: dict):
+    allowed = list({
+        *WorkflowTransitions.CAN_REJECT,
+        "department_head",
+        "department head",
+        "head",
+        "supervisor"
+    })
+    require_role(user_context, allowed, "Purchase request approval")
+
+def require_management_approval(user_context: dict):
+    require_role(user_context, ["admin", "management", "manager", "validator"], "Purchase order approval")
+
+def require_finance_approval(user_context: dict):
+    require_role(user_context, ["admin", "finance"], "Payment approval")
+
+def apply_pr_transition(pr: dict, requested_status: str, user_context: dict) -> dict:
+    current_status = pr.get("status") or PRStatus.DRAFT.value
+    target_status = requested_status
+    normalized_current = current_status.lower()
+    normalized_target = target_status.lower()
+    update_doc = {
+        "status": target_status,
+        "workflow_action": normalized_target,
+        "workflow_updated_by": user_context.get("username")
+    }
+
+    if normalized_target == "submitted":
+        if normalized_current not in {"draft", "returned"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only Draft or Returned PRs can be submitted")
+        if not WorkflowTransitions.can_user_submit(user_context.get("role", "")):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to submit purchase requests")
+        required_stages = [stage.value for stage in ApprovalMatrix.get_required_stages(pr.get("total_amount", 0), pr.get("office_section"))]
+        update_doc.update({
+            "approval_required_stages": required_stages,
+            "approval_current_stage": ApprovalStage.SUPERVISOR.value if required_stages else None,
+            "approval_history": pr.get("approval_history", []) + [{
+                "action": "Submitted",
+                "by": user_context.get("username"),
+                "at": datetime.now(timezone.utc).isoformat()
+            }]
+        })
+        return update_doc
+
+    if normalized_target == "approved":
+        if normalized_current not in {"submitted", "under review"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only Submitted or Under Review PRs can be approved")
+        require_department_head_approval(user_context)
+        current_stage = pr.get("approval_current_stage") or ApprovalStage.SUPERVISOR.value
+        if not WorkflowTransitions.can_user_approve_at_stage(user_context.get("role", ""), ApprovalStage.SUPERVISOR):
+            allowed_department_roles = {"department_head", "department head", "head", "supervisor", "admin"}
+            if user_context.get("role", "") not in allowed_department_roles:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current approval stage requires department head approval")
+        update_doc.update({
+            "approval_current_stage": None,
+            "approval_completed_at": datetime.now(timezone.utc).isoformat(),
+            "approval_history": pr.get("approval_history", []) + [{
+                "action": "Approved",
+                "stage": current_stage,
+                "by": user_context.get("username"),
+                "at": datetime.now(timezone.utc).isoformat()
+            }]
+        })
+        return update_doc
+
+    if normalized_target == "rejected":
+        if normalized_current not in {"submitted", "under review", "approved"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only submitted, under review, or approved PRs can be rejected")
+        if not WorkflowTransitions.can_user_reject(user_context.get("role", "")):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to reject purchase requests")
+        update_doc["approval_history"] = pr.get("approval_history", []) + [{
+            "action": "Rejected",
+            "by": user_context.get("username"),
+            "at": datetime.now(timezone.utc).isoformat()
+        }]
+        return update_doc
+
+    if normalized_target == "returned":
+        if normalized_current not in {"submitted", "under review", "rejected"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only submitted, under review, or rejected PRs can be returned")
+        if not WorkflowTransitions.can_user_reject(user_context.get("role", "")):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not allowed to return purchase requests")
+        update_doc["approval_history"] = pr.get("approval_history", []) + [{
+            "action": "Returned",
+            "by": user_context.get("username"),
+            "at": datetime.now(timezone.utc).isoformat()
+        }]
+        return update_doc
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid PR transition. Allowed transitions are Draft -> Submitted -> Approved, plus Rejected or Returned from review states."
+    )
 
 async def generate_sequential_number(collection, field_name: str, prefix: str) -> str:
     year = datetime.now(timezone.utc).year
@@ -421,6 +538,118 @@ def normalize_abstract_response(doc: dict) -> dict:
         "date_created": doc.get("date_created") or datetime.now(timezone.utc).isoformat(),
         "date_updated": doc.get("date_updated")
     }
+
+def normalize_delivery_response(doc: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": int(doc.get("id", 0)),
+        "receipt_number": doc.get("receipt_number") or "",
+        "po_number": doc.get("po_number") or "",
+        "delivery_date": doc.get("delivery_date") or now,
+        "delivered_by": doc.get("delivered_by") or "",
+        "received_by": doc.get("received_by") or "",
+        "items": normalize_purchase_order_response({"items": doc.get("items") or []})["items"],
+        "remarks": doc.get("remarks") or "",
+        "status": doc.get("status") or "Pending",
+        "date_created": doc.get("date_created") or now,
+        "date_updated": doc.get("date_updated") or doc.get("date_created") or now
+    }
+
+def normalize_invoice_response(doc: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": int(doc.get("id", 0)),
+        "invoice_number": doc.get("invoice_number") or "",
+        "po_number": doc.get("po_number") or "",
+        "supplier_name": doc.get("supplier_name") or "N/A",
+        "invoice_date": doc.get("invoice_date") or now,
+        "due_date": doc.get("due_date"),
+        "amount": doc.get("amount") or 0,
+        "status": doc.get("status") or "Submitted",
+        "remarks": doc.get("remarks") or "",
+        "date_created": doc.get("date_created") or now,
+        "date_updated": doc.get("date_updated") or doc.get("date_created") or now
+    }
+
+def normalize_payment_response(doc: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": int(doc.get("id", 0)),
+        "payment_number": doc.get("payment_number") or "",
+        "invoice_number": doc.get("invoice_number") or "",
+        "po_number": doc.get("po_number") or "",
+        "amount": doc.get("amount") or 0,
+        "payment_method": doc.get("payment_method") or "Bank Transfer",
+        "status": doc.get("status") or "Pending Finance Approval",
+        "approved_by": doc.get("approved_by"),
+        "remarks": doc.get("remarks") or "",
+        "date_created": doc.get("date_created") or now,
+        "date_updated": doc.get("date_updated") or doc.get("date_created") or now
+    }
+
+def normalize_voucher_response(doc: dict) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": int(doc.get("id", 0)),
+        "voucher_number": doc.get("voucher_number") or "",
+        "payment_number": doc.get("payment_number") or "",
+        "invoice_number": doc.get("invoice_number") or "",
+        "po_number": doc.get("po_number") or "",
+        "amount": doc.get("amount") or 0,
+        "status": doc.get("status") or "Prepared",
+        "prepared_by": doc.get("prepared_by") or "",
+        "approved_by": doc.get("approved_by"),
+        "date_created": doc.get("date_created") or now,
+        "date_updated": doc.get("date_updated") or doc.get("date_created") or now
+    }
+
+def make_blockchain_event_id(prefix: str, entity_id: str) -> str:
+    safe_entity = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in str(entity_id))
+    return f"{prefix}-{safe_entity}"
+
+async def record_procurement_event_on_chain(
+    event_type: str,
+    entity_id: str,
+    actor: str,
+    status_value: str,
+    payload: dict
+) -> dict:
+    event_prefix_map = {
+        "PURCHASE_REQUEST_SUBMITTED": "PRSUB",
+        "PURCHASE_REQUEST_APPROVED": "PRAPP",
+        "PURCHASE_ORDER_ISSUED": "POISS",
+        "DELIVERY_RECEIVING_CONFIRMED": "DELREC",
+        "PAYMENT_COMPLETED": "PAYDONE",
+    }
+    event_id = make_blockchain_event_id(event_prefix_map.get(event_type, "EVENT"), entity_id)
+    try:
+        blockchain_client = get_blockchain_client()
+        return blockchain_client.record_procurement_event(
+            event_id=event_id,
+            event_type=event_type,
+            entity_id=entity_id,
+            actor=actor,
+            status=status_value,
+            payload=payload
+        )
+    except Exception as blockchain_error:
+        return {
+            "success": False,
+            "event_id": event_id,
+            "error": str(blockchain_error),
+            "message": "Blockchain recording failed"
+        }
+
+async def update_blockchain_event_metadata(collection, query: dict, event_result: dict):
+    update_doc = {
+        "blockchain_event_id": event_result.get("event_id"),
+        "blockchain_event_tx_id": event_result.get("tx_id"),
+        "blockchain_event_timestamp": event_result.get("timestamp"),
+        "blockchain_event_recorded": bool(event_result.get("success")),
+    }
+    if not event_result.get("success"):
+        update_doc["blockchain_event_error"] = event_result.get("error")
+    await collection.update_one(query, {"$set": update_doc})
 
 # Login endpoint
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -598,15 +827,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 return dt.isoformat()
             return str(dt)
         
-        mark_status_change_audit(
-            request,
-            user_context,
-            "purchase_requests",
-            updated_pr.get("pr_number") or str(updated_pr.get("_id")),
-            pr.get("status"),
-            updated_pr.get("status")
-        )
-
         try:
             user_id_int = int(user_id) if str(user_id).isdigit() else hash(str(user_id)) % 2147483647
         except:
@@ -754,11 +974,14 @@ async def create_purchase_request(
             "responsibility_center_code": request.responsibility_center_code or "",
             "date": request.date,
             "remark": request.remark or "",
-            "status": "Pending",
+            "status": PRStatus.DRAFT.value,
             "requested_by": requested_by,
             "requested_by_id": user_id,
             "items": [item.dict() for item in request.items],
             "total_amount": total_amount,
+            "approval_required_stages": [stage.value for stage in ApprovalMatrix.get_required_stages(total_amount, request.office_section)],
+            "approval_current_stage": None,
+            "approval_history": [],
             "date_created": datetime.now(timezone.utc).isoformat(),
             "date_updated": None
         }
@@ -948,7 +1171,7 @@ async def update_purchase_request(
         if update_data.ref_number is not None:
             update_doc["ref_number"] = update_data.ref_number
         if update_data.status is not None:
-            update_doc["status"] = update_data.status
+            update_doc.update(apply_pr_transition(pr, update_data.status, user_context))
         if update_data.items is not None:
             update_doc["items"] = [item.dict() for item in update_data.items]
             # Recalculate total amount if items changed
@@ -1298,6 +1521,27 @@ async def create_order(order_data: CreatePurchaseOrder, request: Request, creden
     }
     await db.purchase_orders.insert_one(order_doc)
     mark_status_change_audit(request, user_context, "purchase_orders", po_number, None, "Draft")
+    event_result = await record_procurement_event_on_chain(
+        "PURCHASE_ORDER_ISSUED",
+        po_number,
+        user_context.get("username", "unknown"),
+        order_doc.get("status"),
+        {
+            "po_number": po_number,
+            "pr_number": order_doc.get("pr_number"),
+            "supplier": order_doc.get("supplier"),
+            "total_amount": order_doc.get("total_amount"),
+            "items": order_doc.get("items", [])
+        }
+    )
+    await update_blockchain_event_metadata(db.purchase_orders, {"id": order_id}, event_result)
+    if event_result.get("success"):
+        order_doc.update({
+            "blockchain_event_id": event_result.get("event_id"),
+            "blockchain_event_tx_id": event_result.get("tx_id"),
+            "blockchain_event_timestamp": event_result.get("timestamp"),
+            "blockchain_event_recorded": True
+        })
     return PurchaseOrderResponse(**normalize_purchase_order_response(order_doc))
 
 @app.get("/api/orders", response_model=List[PurchaseOrderResponse])
@@ -1335,6 +1579,10 @@ async def update_order(order_id: str, order_data: UpdatePurchaseOrder, request: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
 
     update_doc = {k: v for k, v in order_data.dict(exclude_unset=True).items() if v is not None}
+    if order_data.status and str(order_data.status).lower() == "approved":
+        require_management_approval(user_context)
+        if str(order.get("status", "")).lower() not in {"draft", "pending", "submitted"}:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only draft, pending, or submitted purchase orders can be approved")
     if order_data.items is not None:
         update_doc["items"] = [item.dict() for item in order_data.items]
         update_doc["total_amount"] = sum((item.total_price if item.total_price is not None else item.quantity * item.unit_price) for item in order_data.items)
@@ -1347,6 +1595,260 @@ async def update_order(order_id: str, order_data: UpdatePurchaseOrder, request: 
 @app.post("/api/orders/{order_id}/approve", response_model=PurchaseOrderResponse)
 async def approve_order(order_id: str, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
     return await update_order(order_id, UpdatePurchaseOrder(status="Approved"), request, credentials)
+
+# Delivery and Receiving endpoints
+@app.post("/api/deliveries", response_model=DeliveryReceiptResponse)
+async def create_delivery_receipt(delivery: CreateDeliveryReceipt, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    po = await db.purchase_orders.find_one({"po_number": delivery.po_number})
+    if not po:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+    if str(po.get("status", "")).lower() not in {"approved", "completed"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only approved purchase orders can receive deliveries")
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": await get_next_numeric_id(db.delivery_receipts),
+        "receipt_number": await generate_sequential_number(db.delivery_receipts, "receipt_number", "DR"),
+        "po_number": delivery.po_number,
+        "delivery_date": delivery.delivery_date,
+        "delivered_by": delivery.delivered_by,
+        "received_by": delivery.received_by,
+        "items": [item.dict() for item in delivery.items] if delivery.items else po.get("items", []),
+        "remarks": delivery.remarks or "",
+        "status": "Pending Acceptance",
+        "created_by": user_context.get("username"),
+        "date_created": now,
+        "date_updated": now
+    }
+    await db.delivery_receipts.insert_one(doc)
+    mark_status_change_audit(request, user_context, "delivery_receipts", doc["receipt_number"], None, doc["status"])
+    return DeliveryReceiptResponse(**normalize_delivery_response(doc))
+
+@app.get("/api/deliveries", response_model=List[DeliveryReceiptResponse])
+async def get_delivery_receipts(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    docs = await db.delivery_receipts.find({}).sort("date_created", -1).to_list(length=None)
+    return [DeliveryReceiptResponse(**normalize_delivery_response(doc)) for doc in docs]
+
+@app.get("/api/deliveries/{receipt_id}", response_model=DeliveryReceiptResponse)
+async def get_delivery_receipt(receipt_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    query = {"receipt_number": receipt_id}
+    try:
+        query = {"id": int(receipt_id)}
+    except Exception:
+        pass
+    doc = await db.delivery_receipts.find_one(query)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery receipt not found")
+    return DeliveryReceiptResponse(**normalize_delivery_response(doc))
+
+@app.put("/api/deliveries/{receipt_id}", response_model=DeliveryReceiptResponse)
+async def update_delivery_receipt(receipt_id: str, delivery_update: UpdateDeliveryReceipt, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    query = {"receipt_number": receipt_id}
+    try:
+        query = {"id": int(receipt_id)}
+    except Exception:
+        pass
+    doc = await db.delivery_receipts.find_one(query)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery receipt not found")
+    update_doc = {k: v for k, v in delivery_update.dict(exclude_unset=True).items() if v is not None}
+    if "status" in update_doc and update_doc["status"] not in {"Accepted", "Rejected", "Pending Acceptance"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Delivery status must be Accepted, Rejected, or Pending Acceptance")
+    update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
+    await db.delivery_receipts.update_one(query, {"$set": update_doc})
+    updated = await db.delivery_receipts.find_one(query)
+    mark_status_change_audit(request, user_context, "delivery_receipts", updated.get("receipt_number"), doc.get("status"), updated.get("status"))
+    if doc.get("status") != updated.get("status") and updated.get("status") in {"Accepted", "Rejected"}:
+        event_result = await record_procurement_event_on_chain(
+            "DELIVERY_RECEIVING_CONFIRMED",
+            updated.get("receipt_number"),
+            user_context.get("username", "unknown"),
+            updated.get("status"),
+            {
+                "receipt_number": updated.get("receipt_number"),
+                "po_number": updated.get("po_number"),
+                "delivery_date": updated.get("delivery_date"),
+                "delivered_by": updated.get("delivered_by"),
+                "received_by": updated.get("received_by"),
+                "items": updated.get("items", []),
+                "remarks": updated.get("remarks", "")
+            }
+        )
+        await update_blockchain_event_metadata(db.delivery_receipts, query, event_result)
+        updated = await db.delivery_receipts.find_one(query)
+    return DeliveryReceiptResponse(**normalize_delivery_response(updated))
+
+# Invoice, Payment, and Disbursement Voucher endpoints
+@app.post("/api/invoices", response_model=InvoiceResponse)
+async def create_invoice(invoice: CreateInvoice, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    po = await db.purchase_orders.find_one({"po_number": invoice.po_number})
+    if not po:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+    accepted_delivery = await db.delivery_receipts.find_one({"po_number": invoice.po_number, "status": "Accepted"})
+    if not accepted_delivery:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice requires an accepted delivery receipt")
+    existing = await db.invoices.find_one({"invoice_number": invoice.invoice_number})
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice number already exists")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": await get_next_numeric_id(db.invoices),
+        "invoice_number": invoice.invoice_number,
+        "po_number": invoice.po_number,
+        "supplier_name": invoice.supplier_name or (po.get("supplier") or {}).get("name", "N/A"),
+        "invoice_date": invoice.invoice_date,
+        "due_date": invoice.due_date,
+        "amount": invoice.amount,
+        "status": "Submitted",
+        "remarks": invoice.remarks or "",
+        "submitted_by": user_context.get("username"),
+        "date_created": now,
+        "date_updated": now
+    }
+    await db.invoices.insert_one(doc)
+    mark_status_change_audit(request, user_context, "invoices", doc["invoice_number"], None, doc["status"])
+    return InvoiceResponse(**normalize_invoice_response(doc))
+
+@app.get("/api/invoices", response_model=List[InvoiceResponse])
+async def get_invoices(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    docs = await db.invoices.find({}).sort("date_created", -1).to_list(length=None)
+    return [InvoiceResponse(**normalize_invoice_response(doc)) for doc in docs]
+
+@app.get("/api/invoices/{invoice_number}", response_model=InvoiceResponse)
+async def get_invoice(invoice_number: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    doc = await db.invoices.find_one({"invoice_number": invoice_number})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    return InvoiceResponse(**normalize_invoice_response(doc))
+
+@app.put("/api/invoices/{invoice_number}", response_model=InvoiceResponse)
+async def update_invoice(invoice_number: str, invoice_update: UpdateInvoice, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    doc = await db.invoices.find_one({"invoice_number": invoice_number})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    update_doc = {k: v for k, v in invoice_update.dict(exclude_unset=True).items() if v is not None}
+    if update_doc.get("status") not in {None, "Submitted", "Verified", "Rejected"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice status must be Submitted, Verified, or Rejected")
+    update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
+    await db.invoices.update_one({"invoice_number": invoice_number}, {"$set": update_doc})
+    updated = await db.invoices.find_one({"invoice_number": invoice_number})
+    mark_status_change_audit(request, user_context, "invoices", invoice_number, doc.get("status"), updated.get("status"))
+    return InvoiceResponse(**normalize_invoice_response(updated))
+
+@app.post("/api/payments", response_model=PaymentResponse)
+async def create_payment(payment: CreatePayment, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    invoice = await db.invoices.find_one({"invoice_number": payment.invoice_number})
+    if not invoice:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    if str(invoice.get("status", "")).lower() not in {"submitted", "verified"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only submitted or verified invoices can be queued for payment")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": await get_next_numeric_id(db.payments),
+        "payment_number": await generate_sequential_number(db.payments, "payment_number", "PAY"),
+        "invoice_number": payment.invoice_number,
+        "po_number": invoice.get("po_number"),
+        "amount": payment.amount if payment.amount is not None else invoice.get("amount", 0),
+        "payment_method": payment.payment_method or "Bank Transfer",
+        "status": "Pending Finance Approval",
+        "remarks": payment.remarks or "",
+        "created_by": user_context.get("username"),
+        "date_created": now,
+        "date_updated": now
+    }
+    await db.payments.insert_one(doc)
+    mark_status_change_audit(request, user_context, "payments", doc["payment_number"], None, doc["status"])
+    return PaymentResponse(**normalize_payment_response(doc))
+
+@app.get("/api/payments", response_model=List[PaymentResponse])
+async def get_payments(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    docs = await db.payments.find({}).sort("date_created", -1).to_list(length=None)
+    return [PaymentResponse(**normalize_payment_response(doc)) for doc in docs]
+
+@app.put("/api/payments/{payment_number}", response_model=PaymentResponse)
+async def update_payment(payment_number: str, payment_update: UpdatePayment, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    user_context = await get_authenticated_user_context(credentials)
+    db = await get_database()
+    doc = await db.payments.find_one({"payment_number": payment_number})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+    update_doc = {k: v for k, v in payment_update.dict(exclude_unset=True).items() if v is not None}
+    if update_doc.get("status") == "Approved":
+        require_finance_approval(user_context)
+        update_doc["approved_by"] = user_context.get("username")
+    if update_doc.get("status") not in {None, "Pending Finance Approval", "Approved", "Rejected", "Paid"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment status")
+    update_doc["date_updated"] = datetime.now(timezone.utc).isoformat()
+    await db.payments.update_one({"payment_number": payment_number}, {"$set": update_doc})
+    updated = await db.payments.find_one({"payment_number": payment_number})
+    mark_status_change_audit(request, user_context, "payments", payment_number, doc.get("status"), updated.get("status"))
+    if updated.get("status") == "Approved":
+        existing_voucher = await db.disbursement_vouchers.find_one({"payment_number": payment_number})
+        if not existing_voucher:
+            now = datetime.now(timezone.utc).isoformat()
+            voucher = {
+                "id": await get_next_numeric_id(db.disbursement_vouchers),
+                "voucher_number": await generate_sequential_number(db.disbursement_vouchers, "voucher_number", "DV"),
+                "payment_number": payment_number,
+                "invoice_number": updated.get("invoice_number"),
+                "po_number": updated.get("po_number"),
+                "amount": updated.get("amount", 0),
+                "status": "Prepared",
+                "prepared_by": user_context.get("username"),
+                "approved_by": user_context.get("username"),
+                "date_created": now,
+                "date_updated": now
+            }
+            await db.disbursement_vouchers.insert_one(voucher)
+    if doc.get("status") != updated.get("status") and updated.get("status") == "Paid":
+        event_result = await record_procurement_event_on_chain(
+            "PAYMENT_COMPLETED",
+            payment_number,
+            user_context.get("username", "unknown"),
+            updated.get("status"),
+            {
+                "payment_number": payment_number,
+                "invoice_number": updated.get("invoice_number"),
+                "po_number": updated.get("po_number"),
+                "amount": updated.get("amount"),
+                "payment_method": updated.get("payment_method"),
+                "approved_by": updated.get("approved_by")
+            }
+        )
+        await update_blockchain_event_metadata(db.payments, {"payment_number": payment_number}, event_result)
+        updated = await db.payments.find_one({"payment_number": payment_number})
+    return PaymentResponse(**normalize_payment_response(updated))
+
+@app.post("/api/payments/{payment_number}/approve", response_model=PaymentResponse)
+async def approve_payment(payment_number: str, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    return await update_payment(payment_number, UpdatePayment(status="Approved"), request, credentials)
+
+@app.get("/api/disbursement-vouchers", response_model=List[DisbursementVoucherResponse])
+async def get_disbursement_vouchers(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    await get_authenticated_user_context(credentials)
+    db = await get_database()
+    docs = await db.disbursement_vouchers.find({}).sort("date_created", -1).to_list(length=None)
+    return [DisbursementVoucherResponse(**normalize_voucher_response(doc)) for doc in docs]
 
 # Audit log endpoint
 @app.get("/api/audit-logs")
@@ -2737,6 +3239,140 @@ async def get_waste_materials_report(
         )
 
 # ===== BLOCKCHAIN INSPECTION RECORDS =====
+
+@app.get("/api/blockchain/events")
+async def get_blockchain_procurement_events(
+    event_type: Optional[str] = Query(None),
+    entity_id: Optional[str] = Query(None),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Return inspection-derived blockchain events from Fabric inspection records."""
+    await get_authenticated_user_context(credentials)
+    def inspection_to_event(inspection: dict, source: str = "fabric") -> dict:
+            inspection_id = (
+                inspection.get("inspectionId")
+                or inspection.get("inspection_id")
+                or inspection.get("id")
+                or str(inspection.get("_id", ""))
+                or inspection.get("txId")
+                or inspection.get("tx_id")
+            )
+            po_number = inspection.get("poNumber") or inspection.get("po_number") or ""
+            timestamp = (
+                inspection.get("timestamp")
+                or inspection.get("blockchain_timestamp")
+                or inspection.get("createdAt")
+                or inspection.get("date_created")
+                or inspection.get("inspectionDate")
+                or inspection.get("inspection_date")
+                or ""
+            )
+            transaction_id = inspection.get("txId") or inspection.get("tx_id") or inspection.get("blockchain_tx_id") or ""
+            return {
+                "event_id": f"INSP-{inspection_id}" if inspection_id else f"INSP-{transaction_id}",
+                "event_type": "INSPECTION_RECORDED",
+                "timestamp": timestamp,
+                "performed_by": inspection.get("inspectedBy") or inspection.get("inspected_by") or "",
+                "transaction_id": transaction_id,
+                "status": inspection.get("status") or "",
+                "details": {
+                    "inspection_id": inspection_id,
+                    "po_number": po_number,
+                    "inspection_date": inspection.get("inspectionDate") or inspection.get("inspection_date") or "",
+                    "items": inspection.get("items") or [],
+                    "overall_remarks": inspection.get("overallRemarks") or inspection.get("overall_remarks") or "",
+                    "creator_msp_id": inspection.get("creatorMspId") or inspection.get("creator_msp_id") or "",
+                    "locked": bool(inspection.get("locked") or inspection.get("islocked") or inspection.get("blockchain_recorded")),
+                    "source": source
+                }
+            }
+
+    def apply_filters(events: list) -> list:
+        filtered = events
+        if event_type:
+            filtered = [event for event in filtered if event["event_type"] == event_type]
+        if entity_id:
+            filtered = [
+                event for event in filtered
+                if entity_id in {
+                    str(event.get("event_id", "")),
+                    str(event.get("details", {}).get("inspection_id", "")),
+                    str(event.get("details", {}).get("po_number", ""))
+                }
+            ]
+        return filtered
+
+    try:
+        blockchain_client = get_blockchain_client()
+        result = blockchain_client.get_all_inspections()
+
+        if result.get("success"):
+            inspections = result.get("data", [])
+            if not isinstance(inspections, list):
+                inspections = []
+            events = [inspection_to_event(inspection, "fabric") for inspection in inspections]
+            events = apply_filters(events)
+            return {
+                "events": events,
+                "total": len(events),
+                "source": "fabric"
+            }
+
+        db = await get_database()
+        cursor = db.inspected.find({
+            "$or": [
+                {"blockchain_recorded": True},
+                {"blockchain_tx_id": {"$exists": True, "$ne": None}},
+                {"islocked": True},
+                {"isLocked": True}
+            ]
+        }).sort("blockchain_timestamp", -1)
+        inspected_docs = await cursor.to_list(length=None)
+
+        events = []
+        for doc in inspected_docs:
+            if "_id" in doc:
+                doc["id"] = str(doc["_id"])
+                del doc["_id"]
+            events.append(inspection_to_event(doc, "database_fallback"))
+        events = apply_filters(events)
+        return {
+            "events": events,
+            "total": len(events),
+            "source": "database_fallback",
+            "warning": result.get("error", "Fabric query failed; showing locally stored blockchain metadata")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching blockchain procurement events: {str(e)}"
+        )
+
+@app.get("/api/blockchain/events/{event_id}")
+async def get_blockchain_procurement_event(
+    event_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    await get_authenticated_user_context(credentials)
+    blockchain_client = get_blockchain_client()
+    result = blockchain_client.get_procurement_event(event_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result.get("error", "Event not found"))
+    return result.get("data")
+
+@app.get("/api/blockchain/events/{event_id}/verify")
+async def verify_blockchain_procurement_event(
+    event_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    await get_authenticated_user_context(credentials)
+    blockchain_client = get_blockchain_client()
+    result = blockchain_client.verify_procurement_event(event_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result.get("error", "Event not found"))
+    return result.get("data")
 
 @app.get("/api/blockchain/inspections")
 async def get_blockchain_inspections(

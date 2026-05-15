@@ -154,6 +154,94 @@ class AuditLogResponse(BaseModel):
     user_agent: Optional[str] = ""
     created_at: str
 
+class CreateDeliveryReceipt(BaseModel):
+    po_number: str
+    delivery_date: str
+    delivered_by: str
+    received_by: str
+    items: Optional[List[PurchaseOrderItem]] = None
+    remarks: Optional[str] = ""
+
+class UpdateDeliveryReceipt(BaseModel):
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+    received_by: Optional[str] = None
+
+class DeliveryReceiptResponse(BaseModel):
+    id: int
+    receipt_number: str
+    po_number: str
+    delivery_date: str
+    delivered_by: str
+    received_by: str
+    items: List[PurchaseOrderItem]
+    remarks: Optional[str] = ""
+    status: str
+    date_created: str
+    date_updated: str
+
+class CreateInvoice(BaseModel):
+    po_number: str
+    invoice_number: str
+    invoice_date: str
+    supplier_name: Optional[str] = None
+    amount: float
+    due_date: Optional[str] = None
+    remarks: Optional[str] = ""
+
+class UpdateInvoice(BaseModel):
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+class InvoiceResponse(BaseModel):
+    id: int
+    invoice_number: str
+    po_number: str
+    supplier_name: str
+    invoice_date: str
+    due_date: Optional[str] = None
+    amount: float
+    status: str
+    remarks: Optional[str] = ""
+    date_created: str
+    date_updated: str
+
+class CreatePayment(BaseModel):
+    invoice_number: str
+    payment_method: Optional[str] = "Bank Transfer"
+    amount: Optional[float] = None
+    remarks: Optional[str] = ""
+
+class UpdatePayment(BaseModel):
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+
+class PaymentResponse(BaseModel):
+    id: int
+    payment_number: str
+    invoice_number: str
+    po_number: str
+    amount: float
+    payment_method: str
+    status: str
+    approved_by: Optional[str] = None
+    remarks: Optional[str] = ""
+    date_created: str
+    date_updated: str
+
+class DisbursementVoucherResponse(BaseModel):
+    id: int
+    voucher_number: str
+    payment_number: str
+    invoice_number: str
+    po_number: str
+    amount: float
+    status: str
+    prepared_by: str
+    approved_by: Optional[str] = None
+    date_created: str
+    date_updated: str
+
 # Purchase Request model (for creating)
 class CreatePurchaseRequest(BaseModel):
     entity_name: str

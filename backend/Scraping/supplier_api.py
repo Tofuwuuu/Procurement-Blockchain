@@ -4,6 +4,7 @@ from datetime import datetime
 from service import search_and_save_suppliers, get_suppliers_from_db, search_suppliers_from_purchase_requests
 from schema import SupplierOut, SupplierSearchRequest, PurchaseRequestSearchRequest, AddSuppliersToCanvassRequest
 from security import require_canvasser
+from scraper import enrich_supplier_quality
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,6 +12,31 @@ from database import get_database
 from bson.objectid import ObjectId
 
 router = APIRouter(prefix="/api/supplier-search", tags=["Supplier Search"])
+
+def to_supplier_out(result: dict, no: int, default_source: str = "Web Scraping") -> SupplierOut:
+    return SupplierOut(
+        id=result.get("id"),
+        no=no,
+        category=result.get("category", "General"),
+        item_description=result.get("item_description", ""),
+        unit_price=result.get("unit_price", 0.0),
+        supplier_name=result.get("supplier_name", "Unknown"),
+        address=result.get("address"),
+        source=result.get("source", default_source),
+        source_type=result.get("source_type"),
+        verified=result.get("verified", False),
+        is_valid_supplier=result.get("is_valid_supplier", False),
+        price_found=result.get("price_found", False),
+        confidence=result.get("confidence"),
+        extraction_status=result.get("extraction_status"),
+        extraction_warning=result.get("extraction_warning"),
+        url=result.get("url"),
+        stock_property_no=result.get("stock_property_no"),
+        unit=result.get("unit"),
+        quantity=result.get("quantity"),
+        unit_cost=result.get("unit_cost"),
+        date_scraped=result.get("date_scraped")
+    )
 
 @router.post("/search", response_model=List[SupplierOut])
 async def search_suppliers(
@@ -43,23 +69,7 @@ async def search_suppliers(
         # Convert to SupplierOut format
         supplier_out = []
         for i, result in enumerate(results):
-            supplier_out.append(SupplierOut(
-                id=result.get("id"),
-                no=i + 1,
-                category=result.get("category", "General"),
-                item_description=result.get("item_description", ""),
-                unit_price=result.get("unit_price", 0.0),
-                supplier_name=result.get("supplier_name", "Unknown"),
-                address=result.get("address"),
-                source=result.get("source", "Web Scraping"),
-                verified=result.get("verified", False),
-                url=result.get("url"),
-                stock_property_no=result.get("stock_property_no"),
-                unit=result.get("unit"),
-                quantity=result.get("quantity"),
-                unit_cost=result.get("unit_cost"),
-                date_scraped=result.get("date_scraped")
-            ))
+            supplier_out.append(to_supplier_out(result, i + 1))
         
         return supplier_out
         
@@ -88,23 +98,7 @@ async def get_saved_results(
         
         supplier_out = []
         for i, result in enumerate(results):
-            supplier_out.append(SupplierOut(
-                id=result.get("id"),
-                no=i + 1,
-                category=result.get("category", "General"),
-                item_description=result.get("item_description", ""),
-                unit_price=result.get("unit_price", 0.0),
-                supplier_name=result.get("supplier_name", "Unknown"),
-                address=result.get("address"),
-                source=result.get("source", "Web Scraping"),
-                verified=result.get("verified", False),
-                url=result.get("url"),
-                stock_property_no=result.get("stock_property_no"),
-                unit=result.get("unit"),
-                quantity=result.get("quantity"),
-                unit_cost=result.get("unit_cost"),
-                date_scraped=result.get("date_scraped")
-            ))
+            supplier_out.append(to_supplier_out(result, i + 1))
         
         return supplier_out
         
@@ -144,23 +138,7 @@ async def search_suppliers_from_purchase_requests_endpoint(
         # Convert to SupplierOut format
         supplier_out = []
         for i, result in enumerate(results):
-            supplier_out.append(SupplierOut(
-                id=result.get("id"),
-                no=i + 1,
-                category=result.get("category", "General"),
-                item_description=result.get("item_description", ""),
-                unit_price=result.get("unit_price", 0.0),
-                supplier_name=result.get("supplier_name", "Unknown"),
-                address=result.get("address"),
-                source=result.get("source", "Public Web"),
-                verified=result.get("verified", False),
-                url=result.get("url"),
-                stock_property_no=result.get("stock_property_no"),
-                unit=result.get("unit"),
-                quantity=result.get("quantity"),
-                unit_cost=result.get("unit_cost"),
-                date_scraped=result.get("date_scraped")
-            ))
+            supplier_out.append(to_supplier_out(result, i + 1, "Public Web"))
         
         return supplier_out
         
@@ -206,6 +184,10 @@ async def add_suppliers_to_canvass(
                 print(f"🔍 Looking for supplier: {supplier_id}")
                 supplier = await supplier_collection.find_one({"_id": ObjectId(supplier_id)})
                 if supplier:
+                    supplier = enrich_supplier_quality(supplier)
+                    if not supplier.get("is_valid_supplier"):
+                        print(f"⚠️ Supplier skipped because source is not valid for canvass: {supplier_id}")
+                        continue
                     supplier_data = {
                         "supplier_id": str(supplier.get("_id")),
                         "name": supplier.get("supplier_name"),
@@ -216,6 +198,10 @@ async def add_suppliers_to_canvass(
                         "phone": supplier.get("phone"),
                         "email": supplier.get("email"),
                         "source": supplier.get("source", "Web Scraping"),
+                        "source_type": supplier.get("source_type"),
+                        "url": supplier.get("url"),
+                        "confidence": supplier.get("confidence"),
+                        "extraction_status": supplier.get("extraction_status"),
                         "date_added": datetime.now().isoformat()
                     }
                     suppliers.append(supplier_data)
@@ -226,6 +212,11 @@ async def add_suppliers_to_canvass(
                 print(f"❌ Error processing supplier {supplier_id}: {str(e)}")
         
         print(f"📊 Total suppliers to add: {len(suppliers)}")
+        if not suppliers:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid supplier sources selected. Choose rows with supported supplier sources before adding to canvass."
+            )
         
         # Add suppliers to PR
         update_result = await pr_collection.update_one(
@@ -246,13 +237,6 @@ async def add_suppliers_to_canvass(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to add suppliers to purchase request"
             )
-        
-        return {
-            "success": True,
-            "message": f"Added {len(suppliers)} supplier(s) to purchase request",
-            "purchase_request_id": request.purchase_request_id,
-            "suppliers_added": len(suppliers)
-        }
         
         return {
             "success": True,

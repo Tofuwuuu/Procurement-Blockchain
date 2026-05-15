@@ -10,7 +10,13 @@ class SupplierOut(BaseModel):
     supplier_name: str
     address: Optional[str] = None
     source: Optional[str] = None
+    source_type: Optional[str] = None
     verified: bool = False
+    is_valid_supplier: bool = False
+    price_found: bool = False
+    confidence: Optional[int] = None
+    extraction_status: Optional[str] = None
+    extraction_warning: Optional[str] = None
     url: Optional[str] = None
     stock_property_no: Optional[str] = None
     unit: Optional[str] = None

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Table, Form, Modal, Badge, InputGroup } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Table, Form, Modal } from 'react-bootstrap';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './WasteMaterialsReport.css';
 
 interface WasteItem {
   item_description: string;
@@ -15,7 +16,7 @@ interface WasteItem {
   remarks?: string;
 }
 
-interface WasteMaterialsReport {
+interface WasteMaterialsReportRecord {
   id?: string;
   report_number: string;
   agency: string;
@@ -29,23 +30,23 @@ interface WasteMaterialsReport {
   approved_by_designation: string;
   property_inspector: string;
   witness_to_disposition: string;
-  status: 'Draft' | 'Submitted';
+  status: string;
 }
 
 const WasteMaterialsReport: React.FC = () => {
   const { user } = useAuth();
-  const [reports, setReports] = useState<WasteMaterialsReport[]>([]);
+  const [reports, setReports] = useState<WasteMaterialsReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<WasteMaterialsReport | null>(null);
+  const [selectedReport, setSelectedReport] = useState<WasteMaterialsReportRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
   const [showToast, setShowToast] = useState(false);
 
-  const [currentReport, setCurrentReport] = useState<WasteMaterialsReport>({
+  const [currentReport, setCurrentReport] = useState<WasteMaterialsReportRecord>({
     report_number: '',
     agency: '',
     place_of_storage: '',
@@ -191,144 +192,223 @@ const WasteMaterialsReport: React.FC = () => {
 
   const filteredReports = reports.filter(report =>
     report.report_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    report.agency.toLowerCase().includes(searchTerm.toLowerCase())
+    report.agency.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    report.place_of_storage.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) return <LoadingSpinner size="lg" text="Loading Waste Materials Reports..." />;
+  const formatDate = (value?: string) => {
+    if (!value) return 'Not set';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-PH', {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit'
+    });
+  };
+
+  const formatCurrency = (value?: number) =>
+    new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: 'PHP'
+    }).format(value || 0);
+
+  const getStatusClass = (status: string) => {
+    const normalized = status.toLowerCase();
+    if (normalized === 'submitted' || normalized === 'approved') return 'is-submitted';
+    if (normalized === 'draft') return 'is-draft';
+    return 'is-neutral';
+  };
+
+  const draftCount = reports.filter(report => report.status.toLowerCase() === 'draft').length;
+  const submittedCount = reports.filter(report =>
+    ['submitted', 'approved'].includes(report.status.toLowerCase())
+  ).length;
+  const itemCount = reports.reduce((sum, report) => sum + report.items.length, 0);
+  const totalValue = reports.reduce((sum, report) => sum + (Number(report.total_amount) || 0), 0);
+
+  if (loading) {
+    return (
+      <Container fluid className="wmr-page py-4">
+        <div className="wmr-loading">
+          <LoadingSpinner size="lg" text="Loading Waste Materials Reports..." />
+        </div>
+      </Container>
+    );
+  }
 
   return (
-    <Container fluid className="py-5">
+    <Container fluid className="wmr-page py-4">
       {error && (
-        <Row className="mb-4">
+        <Row className="mb-3">
           <Col>
-            <div className="alert alert-danger alert-dismissible fade show" role="alert">
-              <i className="bi bi-exclamation-circle me-2"></i>
+            <div className="alert alert-danger wmr-alert" role="alert">
+              <i className="bi bi-exclamation-circle me-2" aria-hidden="true"></i>
               {error}
             </div>
           </Col>
         </Row>
       )}
 
-      {/* Header Section */}
-      <Row className="mb-5">
-        <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h1 className="fw-bold text-dark mb-2">
-                <i className="bi bi-exclamation-triangle text-warning me-3"></i>
-                Waste Materials Report
-              </h1>
-              <p className="text-muted fs-6">Manage and track disposal of waste materials and damaged items</p>
-            </div>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => {
-                setCurrentReport({
-                  report_number: '',
-                  agency: '',
-                  place_of_storage: '',
-                  report_date: new Date().toISOString().split('T')[0],
-                  items: [],
-                  total_amount: 0,
-                  certified_by: user?.full_name || '',
-                  certified_by_designation: '',
-                  approved_by: '',
-                  approved_by_designation: '',
-                  property_inspector: '',
-                  witness_to_disposition: '',
-                  status: 'Draft'
-                });
-                setNewItem({
-                  item_description: '',
-                  quantity: 0,
-                  unit: '',
-                  or_number: '',
-                  or_amount: 0,
-                  disposal_method: 'Destroyed',
-                  remarks: ''
-                });
-                setShowModal(true);
-              }}
-              className="px-4 py-2"
-            >
-              <i className="bi bi-plus-circle me-2"></i>
-              New Report
-            </Button>
-          </div>
-        </Col>
-      </Row>
+      <section className="wmr-hero mb-4">
+        <div className="wmr-hero-copy">
+          <span className="wmr-eyebrow">Disposal accountability</span>
+          <h1>Waste Materials Report</h1>
+          <p>Document damaged or waste materials, disposal proceeds, approvals, and inspection details.</p>
+        </div>
+        <Button
+          className="wmr-primary-action"
+          onClick={() => {
+            setCurrentReport({
+              report_number: '',
+              agency: '',
+              place_of_storage: '',
+              report_date: new Date().toISOString().split('T')[0],
+              items: [],
+              total_amount: 0,
+              certified_by: user?.full_name || '',
+              certified_by_designation: '',
+              approved_by: '',
+              approved_by_designation: '',
+              property_inspector: '',
+              witness_to_disposition: '',
+              status: 'Draft'
+            });
+            setNewItem({
+              item_description: '',
+              quantity: 0,
+              unit: '',
+              or_number: '',
+              or_amount: 0,
+              disposal_method: 'Destroyed',
+              remarks: ''
+            });
+            setShowModal(true);
+          }}
+        >
+          <i className="bi bi-plus-circle" aria-hidden="true"></i>
+          New Report
+        </Button>
+      </section>
 
-      {/* Search Section */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <InputGroup>
-            <InputGroup.Text className="bg-light border-light">
-              <i className="bi bi-search"></i>
-            </InputGroup.Text>
-            <Form.Control
-              placeholder="Search by report number or agency..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="border-light"
-            />
-          </InputGroup>
+      <Row className="g-3 mb-4">
+        <Col md={6} xl={3}>
+          <Card className="wmr-stat-card">
+            <Card.Body>
+              <span>Total reports</span>
+              <strong>{reports.length}</strong>
+              <small>Waste material reports on file</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="wmr-stat-card">
+            <Card.Body>
+              <span>Total value</span>
+              <strong>{formatCurrency(totalValue)}</strong>
+              <small>Recorded disposal proceeds</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="wmr-stat-card">
+            <Card.Body>
+              <span>Draft reports</span>
+              <strong>{draftCount}</strong>
+              <small>Still being prepared</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="wmr-stat-card">
+            <Card.Body>
+              <span>Disposed items</span>
+              <strong>{itemCount}</strong>
+              <small>{submittedCount} submitted or approved reports</small>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       {/* Reports Table Section */}
       <Row>
         <Col>
-          <Card className="border-0 shadow-sm rounded-lg overflow-hidden">
-            <Card.Body className="p-0">
-              <div style={{ overflowX: 'auto' }}>
-                <Table hover className="mb-0 table-striped">
-                  <thead className="bg-light border-bottom">
+          <Card className="wmr-table-card shadow-sm">
+            <Card.Header>
+              <div>
+                <h5>Waste materials reports</h5>
+                <p>{filteredReports.length} of {reports.length} records shown</p>
+              </div>
+              <Form.Group className="wmr-search">
+                <i className="bi bi-search" aria-hidden="true"></i>
+                <Form.Control
+                  placeholder="Search report no., agency, or storage"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </Form.Group>
+            </Card.Header>
+            <Card.Body>
+              <div className="table-responsive">
+                <Table hover className="wmr-table">
+                  <thead>
                     <tr>
-                      <th className="fw-bold text-dark">Report No.</th>
-                      <th className="fw-bold text-dark">Agency</th>
-                      <th className="fw-bold text-dark">Report Date</th>
-                      <th className="fw-bold text-dark text-end">Total Amount</th>
-                      <th className="fw-bold text-dark text-center">Status</th>
-                      <th className="fw-bold text-dark text-center">Action</th>
+                      <th>Report No.</th>
+                      <th>Agency</th>
+                      <th>Report Date</th>
+                      <th>Items</th>
+                      <th className="text-end">Total Amount</th>
+                      <th>Status</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredReports.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-5 text-muted">
-                          <i className="bi bi-inbox fs-1 d-block mb-2"></i>
-                          <span>No waste materials reports found</span>
+                        <td colSpan={7}>
+                          <div className="wmr-empty-state">
+                            <i className="bi bi-inbox" aria-hidden="true"></i>
+                            <h5>No waste materials reports found</h5>
+                            <p>
+                              {searchTerm
+                                ? 'Try another search term or clear the search field.'
+                                : 'Create a report when waste or damaged materials are ready for disposal documentation.'}
+                            </p>
+                          </div>
                         </td>
                       </tr>
                     ) : (
                       filteredReports.map((report) => (
-                        <tr key={report.id} className="align-middle">
-                          <td className="fw-bold text-primary">{report.report_number}</td>
-                          <td>{report.agency}</td>
+                        <tr key={report.id || report.report_number}>
                           <td>
-                            <small>{new Date(report.report_date).toLocaleDateString()}</small>
+                            <strong className="wmr-number">{report.report_number}</strong>
                           </td>
+                          <td>
+                            <div className="wmr-agency">{report.agency}</div>
+                            {report.place_of_storage && <small>{report.place_of_storage}</small>}
+                          </td>
+                          <td>{formatDate(report.report_date)}</td>
+                          <td>{report.items.length}</td>
                           <td className="text-end">
-                            <span className="fw-bold text-success">₱{report.total_amount.toFixed(2)}</span>
+                            <strong className="wmr-amount">{formatCurrency(report.total_amount)}</strong>
                           </td>
-                          <td className="text-center">
-                            <Badge bg={report.status === 'Submitted' ? 'success' : 'warning'} className="px-3 py-2">
+                          <td>
+                            <span className={`badge wmr-status ${getStatusClass(report.status)}`}>
                               {report.status}
-                            </Badge>
+                            </span>
                           </td>
-                          <td className="text-center">
+                          <td>
                             <Button
-                              variant="outline-info"
                               size="sm"
+                              className="wmr-view-btn"
                               onClick={() => {
                                 setSelectedReport(report);
                                 setShowViewModal(true);
                               }}
-                              className="rounded-circle"
-                              style={{ width: '36px', height: '36px', padding: 0 }}
+                              aria-label={`View ${report.report_number}`}
                             >
-                              <i className="bi bi-eye"></i>
+                              <i className="bi bi-eye" aria-hidden="true"></i>
+                              View
                             </Button>
                           </td>
                         </tr>
@@ -343,62 +423,57 @@ const WasteMaterialsReport: React.FC = () => {
       </Row>
 
       {/* Create Report Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
-        <Modal.Header closeButton className="bg-light border-bottom">
-          <Modal.Title className="fw-bold">
-            <i className="bi bi-file-earmark-plus text-primary me-2"></i>
-            New Waste Materials Report
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered className="wmr-modal">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <span>Create document</span>
+            <strong>Waste Materials Report</strong>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-4">
+        <Modal.Body>
           <Form>
             {/* Header Section */}
-            <div className="text-center mb-4 pb-3 border-bottom">
-              <h5 className="fw-bold text-dark mb-1">WASTE MATERIALS REPORT</h5>
-              <p className="text-muted small mb-0">CAVITE STATE UNIVERSITY</p>
+            <div className="wmr-document-banner">
+              <span>Official document</span>
+              <h5>Waste Materials Report</h5>
+              <p>CAVITE STATE UNIVERSITY</p>
             </div>
 
             {/* Basic Information */}
-            <Card className="mb-4 border-0 bg-light">
+            <Card className="wmr-form-card mb-4">
               <Card.Body>
-                <h6 className="fw-bold mb-3 text-dark">
-                  <i className="bi bi-info-circle me-2 text-primary"></i>
-                  Basic Information
-                </h6>
+                <div className="wmr-form-section">
+                  <h6>Basic information</h6>
+                  <p>Capture the agency, storage location, and report date.</p>
+                </div>
                 <Row className="g-3">
                   <Col md={4}>
                     <Form.Group>
-                      <Form.Label className="fw-bold small">Report Number *</Form.Label>
+                      <Form.Label className="wmr-form-label">Report Number *</Form.Label>
                       <Form.Control
                         value={currentReport.report_number}
                         onChange={(e) => setCurrentReport({ ...currentReport, report_number: e.target.value })}
                         placeholder="e.g., WMR-2026-001"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
                   <Col md={4}>
                     <Form.Group>
-                      <Form.Label className="fw-bold small">Agency/Office *</Form.Label>
+                      <Form.Label className="wmr-form-label">Agency/Office *</Form.Label>
                       <Form.Control
                         value={currentReport.agency}
                         onChange={(e) => setCurrentReport({ ...currentReport, agency: e.target.value })}
                         placeholder="e.g., Academic Affairs"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
                   <Col md={4}>
                     <Form.Group>
-                      <Form.Label className="fw-bold small">Date *</Form.Label>
+                      <Form.Label className="wmr-form-label">Date *</Form.Label>
                       <Form.Control
                         type="date"
                         value={currentReport.report_date}
                         onChange={(e) => setCurrentReport({ ...currentReport, report_date: e.target.value })}
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
@@ -406,13 +481,11 @@ const WasteMaterialsReport: React.FC = () => {
                 <Row className="g-3 mt-1">
                   <Col md={12}>
                     <Form.Group>
-                      <Form.Label className="fw-bold small">Place of Storage</Form.Label>
+                      <Form.Label className="wmr-form-label">Place of Storage</Form.Label>
                       <Form.Control
                         value={currentReport.place_of_storage}
                         onChange={(e) => setCurrentReport({ ...currentReport, place_of_storage: e.target.value })}
                         placeholder="e.g., Building A, Room 101"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
@@ -421,82 +494,77 @@ const WasteMaterialsReport: React.FC = () => {
             </Card>
 
             {/* Items Section */}
-            <Card className="mb-4 border-0">
-              <Card.Header className="bg-primary text-white border-0 d-flex justify-content-between align-items-center">
-                <h6 className="mb-0 fw-bold">
-                  <i className="bi bi-box me-2"></i>
-                  Items for Disposal
-                </h6>
-                <span className="badge bg-light text-primary fw-bold">
-                  Total: ₱{currentReport.total_amount.toFixed(2)}
+            <Card className="wmr-items-card mb-4">
+              <Card.Header>
+                <div>
+                  <h6>Items for disposal</h6>
+                  <p>List the materials, official receipt details, and disposal method.</p>
+                </div>
+                <span className="wmr-total-pill">
+                  Total: {formatCurrency(currentReport.total_amount)}
                 </span>
               </Card.Header>
-              <Card.Body className="bg-light">
+              <Card.Body>
                 {/* Add Item Form */}
-                <div className="mb-4 p-3 bg-white rounded border border-light">
-                  <h6 className="fw-bold mb-3">Add Item</h6>
-                  <Row className="g-2 mb-3">
+                <div className="wmr-add-item-panel">
+                  <h6>Add Item</h6>
+                  <Row className="g-3 mb-3">
                     <Col md={2}>
                       <Form.Group className="mb-0">
-                        <Form.Label className="small fw-bold">Qty. *</Form.Label>
+                        <Form.Label className="wmr-form-label">Qty. *</Form.Label>
                         <Form.Control
                           type="number"
                           value={newItem.quantity}
                           onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) || 0 })}
-                          size="sm"
                           min="0"
                         />
                       </Form.Group>
                     </Col>
                     <Col md={2}>
                       <Form.Group className="mb-0">
-                        <Form.Label className="small fw-bold">Unit</Form.Label>
+                        <Form.Label className="wmr-form-label">Unit</Form.Label>
                         <Form.Control
                           value={newItem.unit}
                           onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
                           placeholder="pc, set, box"
-                          size="sm"
                         />
                       </Form.Group>
                     </Col>
                     <Col md={3}>
                       <Form.Group className="mb-0">
-                        <Form.Label className="small fw-bold">Description *</Form.Label>
+                        <Form.Label className="wmr-form-label">Description *</Form.Label>
                         <Form.Control
                           value={newItem.item_description}
                           onChange={(e) => setNewItem({ ...newItem, item_description: e.target.value })}
                           placeholder="Item description"
-                          size="sm"
                         />
                       </Form.Group>
                     </Col>
                     <Col md={2}>
                       <Form.Group className="mb-0">
-                        <Form.Label className="small fw-bold">O.R. No. *</Form.Label>
+                        <Form.Label className="wmr-form-label">O.R. No. *</Form.Label>
                         <Form.Control
                           value={newItem.or_number}
                           onChange={(e) => setNewItem({ ...newItem, or_number: e.target.value })}
                           placeholder="O.R. #"
-                          size="sm"
                         />
                       </Form.Group>
                     </Col>
                     <Col md={2}>
                       <Form.Group className="mb-0">
-                        <Form.Label className="small fw-bold">Amount</Form.Label>
+                        <Form.Label className="wmr-form-label">Amount</Form.Label>
                         <Form.Control
                           type="number"
                           step="0.01"
                           value={newItem.or_amount}
                           onChange={(e) => setNewItem({ ...newItem, or_amount: parseFloat(e.target.value) || 0 })}
-                          size="sm"
                           min="0"
                         />
                       </Form.Group>
                     </Col>
                     <Col md={1} className="d-flex align-items-end">
-                      <Button variant="success" size="sm" onClick={handleAddItem} className="w-100">
-                        <i className="bi bi-plus-lg"></i>
+                      <Button onClick={handleAddItem} className="wmr-add-item-btn w-100">
+                        <i className="bi bi-plus-lg" aria-hidden="true"></i>
                       </Button>
                     </Col>
                   </Row>
@@ -504,13 +572,13 @@ const WasteMaterialsReport: React.FC = () => {
                   <Row className="g-3">
                     <Col md={12}>
                       <Form.Group>
-                        <Form.Label className="small fw-bold mb-2">Disposal Method</Form.Label>
-                        <div className="d-flex flex-wrap gap-3">
+                        <Form.Label className="wmr-form-label">Disposal Method</Form.Label>
+                        <div className="wmr-method-grid">
                           {['Destroyed', 'Sold at private sale', 'Sold at public auction', 'Transferred', 'Other'].map((method) => (
                             <Form.Check
                               key={method}
                               type="radio"
-                              label={<span className="small">{method}</span>}
+                              label={method}
                               value={method}
                               checked={newItem.disposal_method === method}
                               onChange={(e) => setNewItem({ ...newItem, disposal_method: e.target.value as any })}
@@ -524,9 +592,9 @@ const WasteMaterialsReport: React.FC = () => {
                 </div>
 
                 {/* Items Table */}
-                {currentReport.items.length > 0 && (
-                  <Table size="sm" className="mb-0 bg-white rounded overflow-hidden">
-                    <thead className="bg-primary text-white">
+                {currentReport.items.length > 0 ? (
+                  <Table size="sm" className="wmr-detail-table">
+                    <thead>
                       <tr>
                         <th className="text-center small fw-bold">Qty.</th>
                         <th className="small fw-bold">Unit</th>
@@ -544,84 +612,86 @@ const WasteMaterialsReport: React.FC = () => {
                           <td className="small">{item.unit}</td>
                           <td className="small">{item.item_description}</td>
                           <td className="small">{item.or_number}</td>
-                          <td className="text-end small fw-bold">₱{item.or_amount.toFixed(2)}</td>
-                          <td><small className="badge bg-info">{item.disposal_method}</small></td>
+                          <td className="text-end small fw-bold">{formatCurrency(item.or_amount)}</td>
+                          <td><small className="wmr-method-pill">{item.disposal_method}</small></td>
                           <td className="text-center">
                             <Button
-                              variant="danger"
                               size="sm"
+                              className="wmr-remove-btn"
                               onClick={() => handleRemoveItem(index)}
-                              className="rounded-circle"
-                              style={{ width: '28px', height: '28px', padding: 0 }}
+                              aria-label={`Remove ${item.item_description}`}
                             >
-                              <i className="bi bi-trash"></i>
+                              <i className="bi bi-trash" aria-hidden="true"></i>
                             </Button>
                           </td>
                         </tr>
                       ))}
-                      <tr className="fw-bold bg-light border-top border-2">
+                      <tr className="wmr-total-row">
                         <td colSpan={4} className="text-end py-2">TOTAL:</td>
-                        <td className="text-end py-2 text-success">₱{currentReport.total_amount.toFixed(2)}</td>
+                        <td className="text-end py-2">{formatCurrency(currentReport.total_amount)}</td>
                         <td></td>
                         <td></td>
                       </tr>
                     </tbody>
                   </Table>
+                ) : (
+                  <div className="wmr-inline-empty">
+                    <i className="bi bi-box-seam" aria-hidden="true"></i>
+                    <span>No disposal items added yet.</span>
+                  </div>
                 )}
               </Card.Body>
             </Card>
 
             {/* Certification Section */}
-            <Card className="mb-4 border-0 bg-light">
+            <Card className="wmr-form-card mb-4">
               <Card.Body>
-                <h6 className="fw-bold mb-3 text-dark">
-                  <i className="bi bi-check-circle me-2 text-success"></i>
-                  Certification
-                </h6>
+                <div className="wmr-form-section">
+                  <h6>Certification</h6>
+                  <p>Record the supply office certification and approval authority.</p>
+                </div>
                 <Row className="g-3">
                   <Col md={6}>
-                    <p className="small text-muted fw-bold mb-2">✓ Certified Correct</p>
+                    <p className="wmr-signature-caption">
+                      <i className="bi bi-check2-circle" aria-hidden="true"></i>
+                      Certified Correct
+                    </p>
                     <Form.Group className="mb-2">
-                      <Form.Label className="small fw-bold">OIC - Supply and Property Office *</Form.Label>
+                      <Form.Label className="wmr-form-label">OIC - Supply and Property Office *</Form.Label>
                       <Form.Control
                         value={currentReport.certified_by}
                         onChange={(e) => setCurrentReport({ ...currentReport, certified_by: e.target.value })}
                         placeholder="Name"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Designation</Form.Label>
+                      <Form.Label className="wmr-form-label">Designation</Form.Label>
                       <Form.Control
                         value={currentReport.certified_by_designation}
                         onChange={(e) => setCurrentReport({ ...currentReport, certified_by_designation: e.target.value })}
                         placeholder="Title/Position"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
                   <Col md={6}>
-                    <p className="small text-muted fw-bold mb-2">✓ Disposal Approved</p>
+                    <p className="wmr-signature-caption">
+                      <i className="bi bi-check2-circle" aria-hidden="true"></i>
+                      Disposal Approved
+                    </p>
                     <Form.Group className="mb-2">
-                      <Form.Label className="small fw-bold">President *</Form.Label>
+                      <Form.Label className="wmr-form-label">President *</Form.Label>
                       <Form.Control
                         value={currentReport.approved_by}
                         onChange={(e) => setCurrentReport({ ...currentReport, approved_by: e.target.value })}
                         placeholder="Name"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Designation</Form.Label>
+                      <Form.Label className="wmr-form-label">Designation</Form.Label>
                       <Form.Control
                         value={currentReport.approved_by_designation}
                         onChange={(e) => setCurrentReport({ ...currentReport, approved_by_designation: e.target.value })}
                         placeholder="Title/Position"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
@@ -630,35 +700,30 @@ const WasteMaterialsReport: React.FC = () => {
             </Card>
 
             {/* Inspection Section */}
-            <Card className="border-0 bg-light">
+            <Card className="wmr-form-card">
               <Card.Body>
-                <h6 className="fw-bold mb-3 text-dark">
-                  <i className="bi bi-search me-2 text-warning"></i>
-                  Certificate of Inspection
-                </h6>
-                <p className="small text-muted mb-3">I hereby certify that the property enumerated above was disposed of as follows:</p>
+                <div className="wmr-form-section">
+                  <h6>Certificate of Inspection</h6>
+                  <p>I hereby certify that the property enumerated above was disposed of as follows.</p>
+                </div>
                 <Row className="g-3">
                   <Col md={6}>
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Property Inspector (Name & Signature)</Form.Label>
+                      <Form.Label className="wmr-form-label">Property Inspector (Name & Signature)</Form.Label>
                       <Form.Control
                         value={currentReport.property_inspector}
                         onChange={(e) => setCurrentReport({ ...currentReport, property_inspector: e.target.value })}
                         placeholder="Inspector name"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
                   <Col md={6}>
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Witness to Disposition</Form.Label>
+                      <Form.Label className="wmr-form-label">Witness to Disposition</Form.Label>
                       <Form.Control
                         value={currentReport.witness_to_disposition}
                         onChange={(e) => setCurrentReport({ ...currentReport, witness_to_disposition: e.target.value })}
                         placeholder="Witness name"
-                        size="sm"
-                        className="border-light"
                       />
                     </Form.Group>
                   </Col>
@@ -667,12 +732,12 @@ const WasteMaterialsReport: React.FC = () => {
             </Card>
           </Form>
         </Modal.Body>
-        <Modal.Footer className="bg-light border-top">
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowModal(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSave} className="px-4">
-            <i className="bi bi-check-circle me-2"></i>
+          <Button className="wmr-primary-action" onClick={handleSave}>
+            <i className="bi bi-check-circle" aria-hidden="true"></i>
             Save Report
           </Button>
         </Modal.Footer>
@@ -680,43 +745,55 @@ const WasteMaterialsReport: React.FC = () => {
 
       {/* View Report Modal */}
       {selectedReport && (
-        <Modal show={showViewModal} onHide={() => setShowViewModal(false)} size="lg" centered>
-          <Modal.Header closeButton className="bg-light border-bottom">
-            <Modal.Title className="fw-bold">
-              <i className="bi bi-file-earmark-check text-primary me-2"></i>
-              Report: {selectedReport.report_number}
+        <Modal show={showViewModal} onHide={() => setShowViewModal(false)} size="lg" centered className="wmr-modal">
+          <Modal.Header closeButton>
+            <Modal.Title>
+              <span>Waste Materials Report</span>
+              <strong>{selectedReport.report_number}</strong>
             </Modal.Title>
           </Modal.Header>
-          <Modal.Body className="p-4">
+          <Modal.Body>
             {/* Report Info */}
-            <Card className="mb-4 border-0 bg-light">
-              <Card.Body>
-                <Row className="g-4">
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Report Number</p>
-                    <p className="fw-bold text-primary">{selectedReport.report_number}</p>
-                  </Col>
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Agency</p>
-                    <p className="fw-bold">{selectedReport.agency}</p>
-                  </Col>
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Report Date</p>
-                    <p className="fw-bold">{new Date(selectedReport.report_date).toLocaleDateString()}</p>
-                  </Col>
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Place of Storage</p>
-                    <p className="fw-bold">{selectedReport.place_of_storage}</p>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
+            <div className="wmr-document-heading">
+              <div>
+                <span>Agency</span>
+                <h3>{selectedReport.agency}</h3>
+                <p>{selectedReport.place_of_storage || 'Storage location not set'}</p>
+              </div>
+              <span className={`badge wmr-status ${getStatusClass(selectedReport.status)}`}>
+                {selectedReport.status}
+              </span>
+            </div>
+
+            <Row className="g-3 mb-4">
+              <Col md={4}>
+                <div className="wmr-detail-tile">
+                  <span>Report No.</span>
+                  <strong>{selectedReport.report_number}</strong>
+                </div>
+              </Col>
+              <Col md={4}>
+                <div className="wmr-detail-tile">
+                  <span>Report Date</span>
+                  <strong>{formatDate(selectedReport.report_date)}</strong>
+                </div>
+              </Col>
+              <Col md={4}>
+                <div className="wmr-detail-tile">
+                  <span>Total Amount</span>
+                  <strong>{formatCurrency(selectedReport.total_amount)}</strong>
+                </div>
+              </Col>
+            </Row>
 
             {/* Items */}
-            <h6 className="fw-bold mb-3">Waste Items ({selectedReport.items.length})</h6>
-            <div style={{ overflowX: 'auto' }} className="mb-4">
-              <Table size="sm" className="mb-0">
-                <thead className="bg-primary text-white">
+            <div className="wmr-section-title">
+              <h6>Waste Items</h6>
+              <span>{selectedReport.items.length} listed</span>
+            </div>
+            <div className="table-responsive mb-4">
+              <Table size="sm" className="wmr-detail-table">
+                <thead>
                   <tr>
                     <th className="small">Qty.</th>
                     <th className="small">Unit</th>
@@ -733,65 +810,50 @@ const WasteMaterialsReport: React.FC = () => {
                       <td className="small">{item.unit}</td>
                       <td className="small">{item.item_description}</td>
                       <td className="small">{item.or_number}</td>
-                      <td className="text-end small">₱{item.or_amount.toFixed(2)}</td>
-                      <td><small className="badge bg-info">{item.disposal_method}</small></td>
+                      <td className="text-end small">{formatCurrency(item.or_amount)}</td>
+                      <td><small className="wmr-method-pill">{item.disposal_method}</small></td>
                     </tr>
                   ))}
                 </tbody>
               </Table>
             </div>
 
-            <Card className="mb-4 border-0 bg-light">
-              <Card.Body>
-                <Row>
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Total Amount</p>
-                    <p className="fw-bold text-success fs-5">₱{selectedReport.total_amount.toFixed(2)}</p>
-                  </Col>
-                  <Col md={6}>
-                    <p className="small text-muted mb-1">Status</p>
-                    <Badge bg={selectedReport.status === 'Submitted' ? 'success' : 'warning'} className="px-3 py-2">
-                      {selectedReport.status}
-                    </Badge>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
-
             {/* Certification Info */}
-            <h6 className="fw-bold mb-3">Certification</h6>
+            <div className="wmr-section-title">
+              <h6>Certification</h6>
+            </div>
             <Row className="g-4 mb-4">
               <Col md={6}>
-                <div className="p-3 bg-light rounded">
-                  <p className="small text-muted mb-1">Certified By</p>
-                  <p className="fw-bold mb-2">{selectedReport.certified_by}</p>
-                  <p className="small text-muted mb-1">Designation</p>
-                  <p className="small">{selectedReport.certified_by_designation}</p>
+                <div className="wmr-person-panel">
+                  <span>Certified By</span>
+                  <strong>{selectedReport.certified_by || 'Not set'}</strong>
+                  <small>{selectedReport.certified_by_designation || 'Designation not set'}</small>
                 </div>
               </Col>
               <Col md={6}>
-                <div className="p-3 bg-light rounded">
-                  <p className="small text-muted mb-1">Approved By</p>
-                  <p className="fw-bold mb-2">{selectedReport.approved_by}</p>
-                  <p className="small text-muted mb-1">Designation</p>
-                  <p className="small">{selectedReport.approved_by_designation}</p>
+                <div className="wmr-person-panel">
+                  <span>Approved By</span>
+                  <strong>{selectedReport.approved_by || 'Not set'}</strong>
+                  <small>{selectedReport.approved_by_designation || 'Designation not set'}</small>
                 </div>
               </Col>
             </Row>
 
             {/* Inspection Info */}
-            <h6 className="fw-bold mb-3">Inspection</h6>
+            <div className="wmr-section-title">
+              <h6>Inspection</h6>
+            </div>
             <Row className="g-4">
               <Col md={6}>
-                <div className="p-3 bg-light rounded">
-                  <p className="small text-muted mb-1">Property Inspector</p>
-                  <p className="small">{selectedReport.property_inspector}</p>
+                <div className="wmr-person-panel">
+                  <span>Property Inspector</span>
+                  <strong>{selectedReport.property_inspector || 'Not set'}</strong>
                 </div>
               </Col>
               <Col md={6}>
-                <div className="p-3 bg-light rounded">
-                  <p className="small text-muted mb-1">Witness to Disposition</p>
-                  <p className="small">{selectedReport.witness_to_disposition}</p>
+                <div className="wmr-person-panel">
+                  <span>Witness to Disposition</span>
+                  <strong>{selectedReport.witness_to_disposition || 'Not set'}</strong>
                 </div>
               </Col>
             </Row>

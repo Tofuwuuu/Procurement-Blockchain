@@ -103,6 +103,123 @@ class BlockchainClient:
                 "result": None,
                 "error": str(e)
             }
+
+    def _invoke_contract(self, args: List[str]) -> Dict:
+        ctor = {"Args": args}
+        command = [
+            "chaincode", "invoke",
+            "-o", self.orderer_address,
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
+            "-C", self.channel_name,
+            "-n", self.chaincode_name,
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
+            "--peerAddresses", "peer0.org2.example.com:9051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt",
+        ]
+        return self._run_peer_command(command, org="org1")
+
+    def _query_contract(self, args: List[str]) -> Dict:
+        ctor = {"Args": args}
+        command = [
+            "chaincode", "query",
+            "--tls",
+            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
+            "-C", self.channel_name,
+            "-n", self.chaincode_name,
+            "-c", json.dumps(ctor),
+            "--peerAddresses", "peer0.org1.example.com:7051",
+            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
+        ]
+        return self._run_peer_command(command, org="org1")
+
+    @staticmethod
+    def _parse_query_result(result: Dict, not_found_message: str = "Record not found") -> Dict:
+        if result["success"]:
+            try:
+                return {"success": True, "data": json.loads(result["result"])}
+            except json.JSONDecodeError:
+                return {"success": False, "error": "Failed to parse blockchain response"}
+        return {"success": False, "error": result.get("error") or not_found_message}
+
+    def record_procurement_event(
+        self,
+        event_id: str,
+        event_type: str,
+        entity_id: str,
+        actor: str,
+        status: str,
+        payload: Optional[Dict] = None
+    ) -> Dict:
+        payload_json = json.dumps(payload or {})
+        event_function_map = {
+            "PURCHASE_REQUEST_SUBMITTED": "InspectionContract:recordPurchaseRequestSubmission",
+            "PURCHASE_REQUEST_APPROVED": "InspectionContract:recordPurchaseRequestApproval",
+            "PURCHASE_ORDER_ISSUED": "InspectionContract:recordPurchaseOrderIssuance",
+            "DELIVERY_RECEIVING_CONFIRMED": "InspectionContract:recordDeliveryReceiving",
+            "PAYMENT_COMPLETED": "InspectionContract:recordPaymentCompletion",
+        }
+        function_name = event_function_map.get(event_type, "InspectionContract:recordProcurementEvent")
+        args = [function_name, event_id, entity_id, actor or "", status or "", payload_json]
+        if function_name == "InspectionContract:recordProcurementEvent":
+            args = [function_name, event_id, event_type, entity_id, actor or "", status or "", payload_json]
+
+        result = self._invoke_contract(args)
+        if result["success"]:
+            query_result = self.get_procurement_event(event_id)
+            event_data = query_result.get("data") or {}
+            return {
+                "success": True,
+                "message": "Procurement event recorded on blockchain",
+                "event_id": event_id,
+                "timestamp": event_data.get("timestamp") or datetime.utcnow().isoformat(),
+                "tx_id": event_data.get("txId"),
+                "raw": result["result"]
+            }
+
+        if self._is_already_locked_error(result.get("error") or ""):
+            query_result = self.get_procurement_event(event_id)
+            event_data = query_result.get("data") or {}
+            return {
+                "success": True,
+                "message": "Procurement event already recorded and locked on blockchain",
+                "event_id": event_id,
+                "timestamp": event_data.get("timestamp") or datetime.utcnow().isoformat(),
+                "tx_id": event_data.get("txId"),
+                "raw": result.get("error") or ""
+            }
+
+        return {
+            "success": False,
+            "error": result["error"],
+            "message": "Failed to record procurement event on blockchain"
+        }
+
+    def get_procurement_event(self, event_id: str) -> Dict:
+        result = self._query_contract(["InspectionContract:getProcurementEvent", event_id])
+        return self._parse_query_result(result, "Procurement event not found on blockchain")
+
+    def get_all_procurement_events(self) -> Dict:
+        result = self._query_contract(["InspectionContract:getAllProcurementEvents"])
+        return self._parse_query_result(result, "Procurement events not found on blockchain")
+
+    def get_procurement_events_by_type(self, event_type: str) -> Dict:
+        result = self._query_contract(["InspectionContract:getProcurementEventsByType", event_type])
+        return self._parse_query_result(result, "Procurement events not found on blockchain")
+
+    def get_procurement_events_by_entity(self, entity_id: str) -> Dict:
+        result = self._query_contract(["InspectionContract:getProcurementEventsByEntity", entity_id])
+        return self._parse_query_result(result, "Procurement events not found on blockchain")
+
+    def verify_procurement_event(self, event_id: str) -> Dict:
+        result = self._query_contract(["InspectionContract:verifyProcurementEvent", event_id])
+        return self._parse_query_result(result, "Procurement event not found on blockchain")
+
+    def get_all_inspections(self) -> Dict:
+        result = self._query_contract(["InspectionContract:getAllInspections"])
+        return self._parse_query_result(result, "Inspection records not found on blockchain")
     
     def record_inspection(
         self,

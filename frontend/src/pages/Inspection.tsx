@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
-  Container, Row, Col, Card, Table, Button, Badge, 
+  Container, Row, Col, Card, Table, Button,
   Form, Modal, InputGroup 
 } from 'react-bootstrap';
-import { apiService, PurchaseOrder, PurchaseRequest } from '../services/api';
+import { apiService, PurchaseOrder } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
+import './Inspection.css';
 
 interface InspectionItem {
   item_description: string;
@@ -28,9 +28,18 @@ interface InspectionReport {
   status: 'Accepted' | 'Partial' | 'Rejected';
 }
 
+const hashString = (str: string): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+};
+
 const Inspection: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   // Debug: Log component mount
@@ -61,6 +70,7 @@ const Inspection: React.FC = () => {
   useEffect(() => {
     fetchOrders();
     loadInspectedPOs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInspectedPOs = async () => {
@@ -162,16 +172,6 @@ const Inspection: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const hashString = (str: string): number => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash);
   };
 
   const handleCreateInspection = (order: PurchaseOrder) => {
@@ -276,80 +276,137 @@ const Inspection: React.FC = () => {
     order.supplier.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const inspectedCount = orders.filter(order => inspectedPOs.has(order.po_number)).length;
+  const readyCount = orders.length - inspectedCount;
+  const totalReadyValue = orders
+    .filter(order => !inspectedPOs.has(order.po_number))
+    .reduce((sum, order) => sum + (order.total_amount || 0), 0);
+  const itemCount = orders.reduce((sum, order) => sum + order.items.length, 0);
+
+  const getConditionClass = (condition: InspectionItem['condition']) => {
+    if (condition === 'Good') return 'is-good';
+    if (condition === 'Defective') return 'is-defective';
+    return 'is-damaged';
+  };
+
   if (loading) {
     return (
-      <Container className="py-4">
-        <LoadingSpinner size="lg" text="Loading orders..." />
+      <Container fluid className="inspection-page py-4">
+        <div className="inspection-loading">
+          <LoadingSpinner size="lg" text="Loading inspection queue..." />
+        </div>
       </Container>
     );
   }
 
   return (
-    <Container className="py-4">
-      {/* Header */}
-      <Row className="mb-4">
-        <Col>
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h2 className="mb-1">Inspection and Acceptance Report</h2>
-              <p className="text-muted mb-0">
-                Create inspection reports for received purchase orders
-              </p>
-            </div>
-          </div>
-        </Col>
-      </Row>
+    <Container fluid className="inspection-page py-4">
+      <section className="inspection-hero mb-4">
+        <div className="inspection-hero-copy">
+          <span className="inspection-eyebrow">Receiving control</span>
+          <h1>Inspection and Acceptance Report</h1>
+          <p>Create acceptance records for received purchase orders and keep every item ready for audit.</p>
+        </div>
+      </section>
 
-      {/* Search */}
-      <Row className="mb-4">
-        <Col md={6}>
-          <InputGroup>
-            <InputGroup.Text>
-              <i className="bi bi-search"></i>
-            </InputGroup.Text>
-            <Form.Control
-              type="text"
-              placeholder="Search by PO number or supplier..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </InputGroup>
+      <Row className="g-3 mb-4">
+        <Col md={6} xl={3}>
+          <Card className="inspection-stat-card">
+            <Card.Body>
+              <span>Ready for inspection</span>
+              <strong>{readyCount}</strong>
+              <small>Purchase orders awaiting review</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="inspection-stat-card">
+            <Card.Body>
+              <span>Already inspected</span>
+              <strong>{inspectedCount}</strong>
+              <small>Reports already submitted</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="inspection-stat-card">
+            <Card.Body>
+              <span>Queue value</span>
+              <strong>{formatCurrency(totalReadyValue)}</strong>
+              <small>Uninspected order amount</small>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6} xl={3}>
+          <Card className="inspection-stat-card">
+            <Card.Body>
+              <span>Line items</span>
+              <strong>{itemCount}</strong>
+              <small>Items across the queue</small>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       {/* Orders Table */}
-      <Card>
+      <Card className="inspection-table-card shadow-sm">
         <Card.Header>
-          <h5 className="mb-0">Purchase Orders Ready for Inspection</h5>
+          <div>
+            <h5>Purchase orders ready for inspection</h5>
+            <p>{filteredOrders.length} of {orders.length} records shown</p>
+          </div>
+          <InputGroup className="inspection-search">
+            <InputGroup.Text>
+              <i className="bi bi-search" aria-hidden="true"></i>
+            </InputGroup.Text>
+            <Form.Control
+              type="text"
+              placeholder="Search PO/PR number or supplier"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </InputGroup>
         </Card.Header>
-        <Card.Body className="p-0">
+        <Card.Body>
           {filteredOrders.length > 0 ? (
             <div className="table-responsive">
-              <Table striped bordered hover className="mb-0">
+              <Table hover className="inspection-table">
                 <thead>
                   <tr>
                     <th>PO/PR Number</th>
                     <th>Supplier/Entity</th>
                     <th>Date Created</th>
+                    <th>Items</th>
                     <th>Total Amount</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredOrders.map((order) => (
-                    <tr key={order.id}>
-                      <td><strong>{order.po_number}</strong></td>
-                      <td>{order.supplier.name}</td>
+                    <tr key={order.id} className={inspectedPOs.has(order.po_number) ? 'is-inspected' : ''}>
+                      <td><strong className="inspection-number">{order.po_number}</strong></td>
+                      <td>
+                        <div className="inspection-supplier">{order.supplier.name}</div>
+                        {order.delivery_address && <small>{order.delivery_address}</small>}
+                      </td>
                       <td>{formatDate(order.date_created)}</td>
-                      <td>{formatCurrency(order.total_amount)}</td>
+                      <td>{order.items.length}</td>
+                      <td><strong>{formatCurrency(order.total_amount)}</strong></td>
+                      <td>
+                        <span className={`inspection-status ${inspectedPOs.has(order.po_number) ? 'is-done' : 'is-ready'}`}>
+                          {inspectedPOs.has(order.po_number) ? 'Inspected' : 'Ready'}
+                        </span>
+                      </td>
                       <td>
                         <Button
-                          variant="primary"
                           size="sm"
+                          className="inspection-action-btn"
                           onClick={() => handleCreateInspection(order)}
+                          disabled={inspectedPOs.has(order.po_number)}
                         >
-                          <i className="bi bi-clipboard-check me-1"></i>
-                          Create Report
+                          <i className="bi bi-clipboard-check" aria-hidden="true"></i>
+                          {inspectedPOs.has(order.po_number) ? 'Completed' : 'Create Report'}
                         </Button>
                       </td>
                     </tr>
@@ -358,12 +415,13 @@ const Inspection: React.FC = () => {
               </Table>
             </div>
           ) : (
-            <div className="text-center py-5">
-              <i className="bi bi-clipboard-check text-muted" style={{ fontSize: '3rem' }}></i>
-              <p className="text-muted mt-3">
+            <div className="inspection-empty-state">
+              <i className="bi bi-clipboard-check" aria-hidden="true"></i>
+              <h5>No inspection queue records found</h5>
+              <p>
                 {searchTerm 
-                  ? 'No orders found matching your search' 
-                  : 'No purchase orders ready for inspection'}
+                  ? 'Try another search term or clear the search field.' 
+                  : 'No purchase orders are ready for inspection yet.'}
               </p>
             </div>
           )}
@@ -371,42 +429,58 @@ const Inspection: React.FC = () => {
       </Card>
 
       {/* Inspection Report Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
-        <Modal.Header closeButton className="bg-primary text-white">
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered className="inspection-modal">
+        <Modal.Header closeButton>
           <Modal.Title>
-            <i className="bi bi-clipboard-check me-2"></i>
-            Inspection and Acceptance Report
+            <span>Create document</span>
+            <strong>Inspection and Acceptance Report</strong>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedOrder && (
             <>
               {/* Order Information */}
-              <Card className="mb-3">
-                <Card.Body>
-                  <Row>
-                    <Col md={6}>
-                      <p className="mb-2"><strong>PO/PR Number:</strong> {selectedOrder.po_number}</p>
-                      <p className="mb-2"><strong>Supplier/Entity:</strong> {selectedOrder.supplier.name}</p>
-                    </Col>
-                    <Col md={6}>
-                      <p className="mb-2"><strong>Date Created:</strong> {formatDate(selectedOrder.date_created)}</p>
-                      <p className="mb-2"><strong>Total Amount:</strong> {formatCurrency(selectedOrder.total_amount)}</p>
-                    </Col>
-                  </Row>
-                </Card.Body>
-              </Card>
+              <div className="inspection-document-heading">
+                <div>
+                  <span>PO/PR Number</span>
+                  <h3>{selectedOrder.po_number}</h3>
+                  <p>{selectedOrder.supplier.name}</p>
+                </div>
+                <span className="inspection-status is-ready">Ready for inspection</span>
+              </div>
+
+              <Row className="g-3 mb-4">
+                <Col md={4}>
+                  <div className="inspection-detail-tile">
+                    <span>Date Created</span>
+                    <strong>{formatDate(selectedOrder.date_created)}</strong>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="inspection-detail-tile">
+                    <span>Total Amount</span>
+                    <strong>{formatCurrency(selectedOrder.total_amount)}</strong>
+                  </div>
+                </Col>
+                <Col md={4}>
+                  <div className="inspection-detail-tile">
+                    <span>Line Items</span>
+                    <strong>{selectedOrder.items.length}</strong>
+                  </div>
+                </Col>
+              </Row>
 
               {/* Inspection Details */}
-              <Card className="mb-3">
-                <Card.Header className="bg-light">
-                  <h6 className="mb-0">Inspection Details</h6>
-                </Card.Header>
+              <Card className="inspection-form-card mb-3">
                 <Card.Body>
-                  <Row>
+                  <div className="inspection-form-section">
+                    <h6>Inspection details</h6>
+                    <p>Record who inspected the delivery and when it was reviewed.</p>
+                  </div>
+                  <Row className="g-3">
                     <Col md={6}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>Inspection Date *</Form.Label>
+                      <Form.Group>
+                        <Form.Label className="inspection-form-label">Inspection Date *</Form.Label>
                         <Form.Control
                           type="date"
                           value={inspectionReport.inspection_date}
@@ -416,8 +490,8 @@ const Inspection: React.FC = () => {
                       </Form.Group>
                     </Col>
                     <Col md={6}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>Inspected By *</Form.Label>
+                      <Form.Group>
+                        <Form.Label className="inspection-form-label">Inspected By *</Form.Label>
                         <Form.Control
                           type="text"
                           value={inspectionReport.inspected_by}
@@ -431,13 +505,16 @@ const Inspection: React.FC = () => {
               </Card>
 
               {/* Items Inspection */}
-              <Card className="mb-3">
-                <Card.Header className="bg-light">
-                  <h6 className="mb-0">Items Inspection</h6>
+              <Card className="inspection-items-card mb-3">
+                <Card.Header>
+                  <div>
+                    <h6>Items inspection</h6>
+                    <p>Confirm received quantities, item condition, and item-level remarks.</p>
+                  </div>
                 </Card.Header>
-                <Card.Body className="p-0">
+                <Card.Body>
                   <div className="table-responsive">
-                    <Table striped bordered className="mb-0">
+                    <Table className="inspection-detail-table">
                       <thead>
                         <tr>
                           <th>Item Description</th>
@@ -453,7 +530,7 @@ const Inspection: React.FC = () => {
                           <tr key={index}>
                             <td>{item.item_description}</td>
                             <td>{item.unit}</td>
-                            <td>{item.quantity_ordered}</td>
+                            <td className="text-center">{item.quantity_ordered}</td>
                             <td>
                               <Form.Control
                                 type="number"
@@ -461,14 +538,14 @@ const Inspection: React.FC = () => {
                                 max={item.quantity_ordered}
                                 value={item.quantity_received}
                                 onChange={(e) => handleUpdateItem(index, 'quantity_received', Number(e.target.value))}
-                                style={{ width: '100px' }}
+                                className="inspection-qty-input"
                               />
                             </td>
                             <td>
                               <Form.Select
                                 value={item.condition}
                                 onChange={(e) => handleUpdateItem(index, 'condition', e.target.value)}
-                                style={{ minWidth: '120px' }}
+                                className={`inspection-condition-select ${getConditionClass(item.condition)}`}
                               >
                                 <option value="Good">Good</option>
                                 <option value="Defective">Defective</option>
@@ -492,13 +569,14 @@ const Inspection: React.FC = () => {
               </Card>
 
               {/* Overall Remarks and Status */}
-              <Card>
-                <Card.Header className="bg-light">
-                  <h6 className="mb-0">Overall Assessment</h6>
-                </Card.Header>
+              <Card className="inspection-form-card">
                 <Card.Body>
+                  <div className="inspection-form-section">
+                    <h6>Overall assessment</h6>
+                    <p>Choose the final acceptance status and add remarks for the record.</p>
+                  </div>
                   <Form.Group className="mb-3">
-                    <Form.Label>Overall Remarks</Form.Label>
+                    <Form.Label className="inspection-form-label">Overall Remarks</Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={3}
@@ -508,7 +586,7 @@ const Inspection: React.FC = () => {
                     />
                   </Form.Group>
                   <Form.Group>
-                    <Form.Label>Inspection Status *</Form.Label>
+                    <Form.Label className="inspection-form-label">Inspection Status *</Form.Label>
                     <Form.Select
                       value={inspectionReport.status}
                       onChange={(e) => setInspectionReport({ ...inspectionReport, status: e.target.value as any })}
@@ -525,15 +603,15 @@ const Inspection: React.FC = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
+          <Button variant="outline-secondary" onClick={() => setShowModal(false)}>
             Cancel
           </Button>
           <Button 
-            variant="primary" 
+            className="inspection-submit-btn"
             onClick={handleSubmitInspection}
             disabled={inspectedPOs.has(inspectionReport.po_number)}
           >
-            <i className="bi bi-check-circle me-2"></i>
+            <i className="bi bi-check-circle" aria-hidden="true"></i>
             {inspectedPOs.has(inspectionReport.po_number) ? 'Already Inspected' : 'Submit Inspection Report'}
           </Button>
         </Modal.Footer>

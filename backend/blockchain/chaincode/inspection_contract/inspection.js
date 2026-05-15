@@ -26,6 +26,192 @@ class InspectionContract extends Contract {
         return parsedKey.attributes[1];
     }
 
+    getTxTimestamp(ctx) {
+        const txTimestamp = ctx.stub.getTxTimestamp();
+        return new Date(txTimestamp.seconds.low * 1000).toISOString();
+    }
+
+    getEventIdFromIndexKey(ctx, key, expectedObjectType) {
+        const parsedKey = ctx.stub.splitCompositeKey(key);
+        if (parsedKey.objectType !== expectedObjectType || parsedKey.attributes.length < 2) {
+            throw new Error(`Invalid ${expectedObjectType} index key: ${key}`);
+        }
+        return parsedKey.attributes[1];
+    }
+
+    async recordProcurementEvent(ctx, eventId, eventType, entityId, actor, status, payloadJson) {
+        const eventKey = ctx.stub.createCompositeKey('procurementEvent', [eventId]);
+        const existing = await ctx.stub.getState(eventKey);
+
+        if (existing && existing.length > 0) {
+            const existingRecord = JSON.parse(existing.toString());
+            if (existingRecord.locked || existingRecord.islocked) {
+                throw new Error(`Procurement event ${eventId} is already recorded and locked. Cannot modify.`);
+            }
+        }
+
+        let payload;
+        try {
+            payload = payloadJson ? JSON.parse(payloadJson) : {};
+        } catch (e) {
+            throw new Error(`Invalid payload JSON: ${e.message}`);
+        }
+
+        const timestamp = this.getTxTimestamp(ctx);
+        const creatorMspId = ctx.clientIdentity.getMSPID();
+        const eventRecord = {
+            eventId,
+            eventType,
+            entityId,
+            actor: actor || '',
+            status: status || '',
+            payload,
+            timestamp,
+            txId: ctx.stub.getTxID(),
+            creatorMspId,
+            locked: true,
+            islocked: true,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        };
+
+        await ctx.stub.putState(eventKey, Buffer.from(JSON.stringify(eventRecord)));
+
+        const typeIndexKey = ctx.stub.createCompositeKey('eventType~event', [eventType, eventId]);
+        await ctx.stub.putState(typeIndexKey, Buffer.from('\u0000'));
+
+        const entityIndexKey = ctx.stub.createCompositeKey('entity~event', [entityId, eventId]);
+        await ctx.stub.putState(entityIndexKey, Buffer.from('\u0000'));
+
+        return eventRecord;
+    }
+
+    async recordPurchaseRequestSubmission(ctx, eventId, prNumber, actor, status, payloadJson) {
+        return this.recordProcurementEvent(ctx, eventId, 'PURCHASE_REQUEST_SUBMITTED', prNumber, actor, status, payloadJson);
+    }
+
+    async recordPurchaseRequestApproval(ctx, eventId, prNumber, actor, status, payloadJson) {
+        return this.recordProcurementEvent(ctx, eventId, 'PURCHASE_REQUEST_APPROVED', prNumber, actor, status, payloadJson);
+    }
+
+    async recordPurchaseOrderIssuance(ctx, eventId, poNumber, actor, status, payloadJson) {
+        return this.recordProcurementEvent(ctx, eventId, 'PURCHASE_ORDER_ISSUED', poNumber, actor, status, payloadJson);
+    }
+
+    async recordDeliveryReceiving(ctx, eventId, receiptNumber, actor, status, payloadJson) {
+        return this.recordProcurementEvent(ctx, eventId, 'DELIVERY_RECEIVING_CONFIRMED', receiptNumber, actor, status, payloadJson);
+    }
+
+    async recordPaymentCompletion(ctx, eventId, paymentNumber, actor, status, payloadJson) {
+        return this.recordProcurementEvent(ctx, eventId, 'PAYMENT_COMPLETED', paymentNumber, actor, status, payloadJson);
+    }
+
+    async getProcurementEvent(ctx, eventId) {
+        const eventKey = ctx.stub.createCompositeKey('procurementEvent', [eventId]);
+        const eventBytes = await ctx.stub.getState(eventKey);
+        if (!eventBytes || eventBytes.length === 0) {
+            throw new Error(`Procurement event ${eventId} does not exist`);
+        }
+        return JSON.parse(eventBytes.toString());
+    }
+
+    async getAllProcurementEvents(ctx) {
+        const iterator = await ctx.stub.getStateByPartialCompositeKey('procurementEvent', []);
+        const results = [];
+
+        let result = await iterator.next();
+        while (!result.done) {
+            const eventBytes = result.value.value;
+            if (eventBytes && eventBytes.length > 0) {
+                results.push(JSON.parse(eventBytes.toString()));
+            }
+            result = await iterator.next();
+        }
+
+        await iterator.close();
+        return results.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+    }
+
+    async getProcurementEventsByType(ctx, eventType) {
+        const iterator = await ctx.stub.getStateByPartialCompositeKey('eventType~event', [eventType]);
+        const results = [];
+
+        let result = await iterator.next();
+        while (!result.done) {
+            const eventId = this.getEventIdFromIndexKey(ctx, result.value.key, 'eventType~event');
+            results.push(await this.getProcurementEvent(ctx, eventId));
+            result = await iterator.next();
+        }
+
+        await iterator.close();
+        return results.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+    }
+
+    async getProcurementEventsByEntity(ctx, entityId) {
+        const iterator = await ctx.stub.getStateByPartialCompositeKey('entity~event', [entityId]);
+        const results = [];
+
+        let result = await iterator.next();
+        while (!result.done) {
+            const eventId = this.getEventIdFromIndexKey(ctx, result.value.key, 'entity~event');
+            results.push(await this.getProcurementEvent(ctx, eventId));
+            result = await iterator.next();
+        }
+
+        await iterator.close();
+        return results.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+    }
+
+    async getProcurementEventHistory(ctx, eventId) {
+        const eventKey = ctx.stub.createCompositeKey('procurementEvent', [eventId]);
+        const iterator = await ctx.stub.getHistoryForKey(eventKey);
+        const results = [];
+
+        const toIsoTimestamp = (ts) => {
+            if (!ts || !ts.seconds) return null;
+            let seconds = ts.seconds;
+            if (typeof seconds === 'object' && seconds !== null && typeof seconds.low === 'number') {
+                seconds = seconds.low;
+            } else if (typeof seconds === 'string') {
+                seconds = parseInt(seconds, 10);
+            }
+            if (typeof seconds !== 'number' || Number.isNaN(seconds)) return null;
+            return new Date(seconds * 1000).toISOString();
+        };
+
+        let result = await iterator.next();
+        while (!result.done) {
+            results.push({
+                txId: result.value.txId,
+                timestamp: toIsoTimestamp(result.value.timestamp),
+                isDelete: result.value.isDelete,
+                value: result.value.isDelete ? null : JSON.parse(result.value.value.toString())
+            });
+            result = await iterator.next();
+        }
+
+        await iterator.close();
+        return results;
+    }
+
+    async verifyProcurementEvent(ctx, eventId) {
+        const event = await this.getProcurementEvent(ctx, eventId);
+        const history = await this.getProcurementEventHistory(ctx, eventId);
+        const isLocked = Boolean(event.locked || event.islocked);
+
+        return {
+            eventId,
+            exists: true,
+            locked: isLocked,
+            islocked: isLocked,
+            txId: event.txId,
+            timestamp: event.timestamp,
+            historyCount: history.length,
+            isImmutable: history.length === 1 && isLocked,
+            verification: isLocked && history.length === 1 ? 'PASS' : 'FAIL'
+        };
+    }
+
     /**
      * Record an inspection result
      * This creates a new inspection record with timestamp and locks it
@@ -54,8 +240,7 @@ class InspectionContract extends Contract {
         }
 
         // Get transaction timestamp
-        const txTimestamp = ctx.stub.getTxTimestamp();
-        const timestamp = new Date(txTimestamp.seconds.low * 1000).toISOString();
+        const timestamp = this.getTxTimestamp(ctx);
         
         // Get transaction creator MSP (for auditability)
         // `stub.getMspId()` is not available in Fabric Node chaincode API;

@@ -950,6 +950,25 @@ export const apiService = {
     return response.data;
   },
 
+  // ===== BLOCKCHAIN PROCUREMENT EVENTS =====
+  getBlockchainEvents: async (params?: { event_type?: string; entity_id?: string }): Promise<{ events: any[]; total: number; source?: string; warning?: string }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.event_type) queryParams.append('event_type', params.event_type);
+    if (params?.entity_id) queryParams.append('entity_id', params.entity_id);
+    const response = await api.get(`/api/blockchain/events${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
+    return response.data;
+  },
+
+  getBlockchainEvent: async (eventId: string): Promise<any> => {
+    const response = await api.get(`/api/blockchain/events/${eventId}`);
+    return response.data;
+  },
+
+  verifyBlockchainEvent: async (eventId: string): Promise<any> => {
+    const response = await api.get(`/api/blockchain/events/${eventId}/verify`);
+    return response.data;
+  },
+
   // ===== BLOCKCHAIN INSPECTIONS =====
   getBlockchainInspections: async (): Promise<any[]> => {
     const response = await api.get('/api/blockchain/inspections');

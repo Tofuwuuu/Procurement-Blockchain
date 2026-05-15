@@ -12,6 +12,16 @@ interface SearchResult {
   itemDescription: string;
   unitPrice: number;
   supplierName: string;
+  source?: string;
+  sourceType?: string;
+  url?: string;
+  verified?: boolean;
+  isValidSupplier: boolean;
+  priceFound: boolean;
+  confidence?: number;
+  extractionStatus?: string;
+  extractionWarning?: string;
+  dateScraped?: string;
   selected: boolean;
 }
 
@@ -20,13 +30,7 @@ interface ApprovedPurchaseRequestRow extends PurchaseRequest {
 }
 
 const SupplierSearch: React.FC = () => {
-  const [urls, setUrls] = useState<string[]>([
-    'https://en.wikipedia.org/wiki/Laptop',
-    'https://en.wikipedia.org/wiki/Computer_monitor',
-    'https://www.globalsources.com/',
-    'https://data.gov.ph/',
-    'https://www.procurementone.ph/'
-  ]);
+  const [urls, setUrls] = useState<string[]>([]);
   const [newUrl, setNewUrl] = useState('');
   const [formData] = useState({
     stockPropertyNo: '',
@@ -59,15 +63,7 @@ const SupplierSearch: React.FC = () => {
     try {
       setLoadingResults(true);
       const results = await apiService.getSupplierSearchResults({ limit: 100 });
-      const formattedResults = results.map((r: any, index: number) => ({
-        id: r.id || r._id,
-        no: index + 1,
-        category: r.category || 'General',
-        itemDescription: r.item_description || '',
-        unitPrice: r.unit_price || 0,
-        supplierName: r.supplier_name || 'Unknown',
-        selected: false
-      }));
+      const formattedResults = formatSupplierResults(results);
       setSearchResults(formattedResults);
     } catch (error: any) {
       console.error('Failed to load saved results:', error);
@@ -79,6 +75,27 @@ const SupplierSearch: React.FC = () => {
       setLoadingResults(false);
     }
   };
+
+  const formatSupplierResults = (results: any[]) =>
+    results.map((r: any, index: number) => ({
+      id: r.id || r._id,
+      no: index + 1,
+      category: r.category || 'General',
+      itemDescription: r.item_description || '',
+      unitPrice: r.unit_price || 0,
+      supplierName: r.supplier_name || 'Unknown',
+      source: r.source,
+      sourceType: r.source_type,
+      url: r.url,
+      verified: Boolean(r.verified),
+      isValidSupplier: Boolean(r.is_valid_supplier),
+      priceFound: Boolean(r.price_found),
+      confidence: r.confidence,
+      extractionStatus: r.extraction_status,
+      extractionWarning: r.extraction_warning,
+      dateScraped: r.date_scraped,
+      selected: false
+    }));
 
   const loadApprovedPurchaseRequests = async () => {
     try {
@@ -131,11 +148,9 @@ const SupplierSearch: React.FC = () => {
         return;
       }
 
-      let results: any[] = [];
+      const resultSets: any[][] = [];
 
-      // If purchase requests are checked and no URLs provided, search by purchase requests
-      if (checkedPRs.length > 0 && activeUrls.length === 0) {
-        // Call API to search suppliers based on checked purchase requests
+      if (checkedPRs.length > 0) {
         const searchData = {
           purchase_request_ids: checkedPRs,
           stock_property_no: formData.stockPropertyNo || undefined,
@@ -143,11 +158,10 @@ const SupplierSearch: React.FC = () => {
           quantity: formData.quantity ? parseInt(formData.quantity) : undefined,
           unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
         };
-        
-        // Note: This assumes apiService has a method for this. If not, we'll need to add it
-        results = await apiService.searchSuppliersFromPurchaseRequests(searchData);
-      } else {
-        // Standard URL-based search
+        resultSets.push(await apiService.searchSuppliersFromPurchaseRequests(searchData));
+      }
+
+      if (activeUrls.length > 0) {
         const searchData = {
           urls: activeUrls,
           stock_property_no: formData.stockPropertyNo || undefined,
@@ -157,22 +171,21 @@ const SupplierSearch: React.FC = () => {
           unit_cost: formData.unitCost ? parseFloat(formData.unitCost) : undefined
         };
 
-        results = await apiService.searchSuppliers(searchData);
+        resultSets.push(await apiService.searchSuppliers(searchData));
       }
       
-      // Format results for display
-      const formattedResults = results.map((r: any, index: number) => ({
-        id: r.id || r._id,
-        no: index + 1,
-        category: r.category || 'General',
-        itemDescription: r.item_description || '',
-        unitPrice: r.unit_price || 0,
-        supplierName: r.supplier_name || 'Unknown',
-        selected: false
-      }));
+      const uniqueResults = Array.from(
+        new Map(
+          resultSets
+            .flat()
+            .map((result) => [result.id || result._id || `${result.supplier_name}-${result.item_description}-${result.url}`, result])
+        ).values()
+      );
+      const formattedResults = formatSupplierResults(uniqueResults);
 
       setSearchResults(formattedResults);
-      setToastMessage(`Found ${formattedResults.length} supplier result(s)`);
+      const validCount = formattedResults.filter((result) => result.isValidSupplier).length;
+      setToastMessage(`Found ${formattedResults.length} result(s), ${validCount} eligible for canvass`);
       setToastType('success');
       setShowToast(true);
     } catch (error: any) {
@@ -188,11 +201,17 @@ const SupplierSearch: React.FC = () => {
   const handleSelectAll = (checked: boolean) => {
     const visibleKeys = new Set(filteredResults.map((result) => result.id || String(result.no)));
     setSearchResults(results =>
-      results.map(r => (visibleKeys.has(r.id || String(r.no)) ? { ...r, selected: checked } : r))
+      results.map(r => (visibleKeys.has(r.id || String(r.no)) && r.isValidSupplier ? { ...r, selected: checked } : r))
     );
   };
 
   const handleSelectRow = (result: SearchResult) => {
+    if (!result.isValidSupplier) {
+      setToastMessage(result.extractionWarning || 'This source is not eligible for canvass.');
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
     const key = result.id || String(result.no);
     setSearchResults(results =>
       results.map(r => ((r.id || String(r.no)) === key ? { ...r, selected: !r.selected } : r))
@@ -200,7 +219,7 @@ const SupplierSearch: React.FC = () => {
   };
 
   const handleAddSelected = () => {
-    const selected = searchResults.filter(r => r.selected);
+    const selected = searchResults.filter(r => r.selected && r.isValidSupplier);
     if (selected.length === 0) {
       setToastMessage('Please select at least one supplier');
       setToastType('warning');
@@ -221,7 +240,7 @@ const SupplierSearch: React.FC = () => {
 
     try {
       setAddingToCanvass(true);
-      const selected = searchResults.filter(r => r.selected);
+      const selected = searchResults.filter(r => r.selected && r.isValidSupplier);
       
       // Use the actual supplier IDs from the results, filtering out undefined
       const supplierIds = selected.map(s => s.id).filter((id): id is string => Boolean(id));
@@ -264,12 +283,29 @@ const SupplierSearch: React.FC = () => {
     }).format(amount);
   };
 
+  const getHostName = (url?: string) => {
+    if (!url) return 'No URL';
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  };
+
+  const statusLabel = (result: SearchResult) => {
+    if (!result.isValidSupplier) return 'Unsupported';
+    if (!result.priceFound) return 'Needs price';
+    return 'Needs validation';
+  };
+
   const filteredResults = useMemo(
     () =>
       searchResults.filter(result =>
         result.itemDescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
         result.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        result.category.toLowerCase().includes(searchTerm.toLowerCase())
+        result.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (result.sourceType || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (result.url || '').toLowerCase().includes(searchTerm.toLowerCase())
       ),
     [searchResults, searchTerm]
   );
@@ -283,7 +319,8 @@ const SupplierSearch: React.FC = () => {
 
   const selectedCount = searchResults.filter(r => r.selected).length;
   const selectedPRCount = approvedPRs.filter(pr => pr.selected).length;
-  const allVisibleSelected = filteredResults.length > 0 && filteredResults.every(r => r.selected);
+  const validVisibleResults = filteredResults.filter((result) => result.isValidSupplier);
+  const allVisibleSelected = validVisibleResults.length > 0 && validVisibleResults.every(r => r.selected);
 
   return (
     <Container fluid className="supplier-search-page py-4">
@@ -292,7 +329,7 @@ const SupplierSearch: React.FC = () => {
           <div className="supplier-eyebrow">Procurement Sourcing</div>
           <h2 className="mb-1">Supplier Search</h2>
           <p className="supplier-page-subtitle mb-0">
-            Search supplier references from approved purchase requests or trusted URLs, then attach selected suppliers to canvass.
+            Search supplier references from approved purchase requests or supplier URLs, then attach eligible results to canvass.
           </p>
         </div>
         <div className="supplier-header-actions">
@@ -303,7 +340,7 @@ const SupplierSearch: React.FC = () => {
 
       <div className="supplier-notice" role="alert">
         <i className="bi bi-info-circle"></i>
-        <span>Supplier data is reference material. Validate pricing, availability, and eligibility before final selection.</span>
+        <span>Only supported supplier sources can be selected. Reference pages and search/map results are shown for review but cannot be added to canvass.</span>
       </div>
 
       <Row className="g-3">
@@ -313,7 +350,7 @@ const SupplierSearch: React.FC = () => {
               <div className="supplier-panel-heading">
                 <div>
                   <h5>Search Sources</h5>
-                  <span>Use URLs, approved PRs, or both.</span>
+                  <span>Use approved PRs, supplier URLs, or both.</span>
                 </div>
               </div>
               <div className="supplier-section-title">
@@ -321,12 +358,15 @@ const SupplierSearch: React.FC = () => {
                 URL Sources
               </div>
               <div className="supplier-url-list">
+                {urls.length === 0 && (
+                  <div className="supplier-empty-mini">No URL sources added</div>
+                )}
                 {urls.map((url, index) => (
                 <InputGroup key={index} className="supplier-url-row">
                   <Form.Control
                     value={url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
-                    placeholder="https://supplier.example.com"
+                    placeholder="https://supplier.example.com/product"
                   />
                   <Button variant="outline-danger" onClick={() => handleRemoveUrl(index)} aria-label="Remove URL">
                     <i className="bi bi-x-lg"></i>
@@ -338,7 +378,7 @@ const SupplierSearch: React.FC = () => {
                 <Form.Control
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder="Add supplier or reference URL"
+                  placeholder="Add supplier product or catalog URL"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
                 />
                 <Button variant="primary" onClick={handleAddUrl}>
@@ -421,7 +461,7 @@ const SupplierSearch: React.FC = () => {
               <div className="supplier-results-toolbar">
                 <div>
                   <h5>Supplier Results</h5>
-                  <span>{filteredResults.length} results shown, {selectedCount} selected</span>
+                  <span>{filteredResults.length} results shown, {validVisibleResults.length} eligible, {selectedCount} selected</span>
                 </div>
               {/* Search Bar */}
               <InputGroup className="supplier-results-search">
@@ -452,22 +492,29 @@ const SupplierSearch: React.FC = () => {
                   <thead>
                     <tr>
                       <th style={{ width: '5%' }}>No.</th>
-                      <th style={{ width: '15%' }}>
+                      <th style={{ width: '14%' }}>
                         Category
                       </th>
-                      <th style={{ width: '30%' }}>
+                      <th style={{ width: '22%' }}>
                         Item Description
                       </th>
-                      <th style={{ width: '15%' }}>
+                      <th style={{ width: '12%' }}>
                         Unit Price
                       </th>
                       <th style={{ width: '20%' }}>
-                        Supplier Name
+                        Supplier
                       </th>
-                      <th style={{ width: '15%' }}>
+                      <th style={{ width: '14%' }}>
+                        Source
+                      </th>
+                      <th style={{ width: '13%' }}>
+                        Quality
+                      </th>
+                      <th style={{ width: '10%' }}>
                         <Form.Check
                           type="checkbox"
                           checked={allVisibleSelected}
+                          disabled={validVisibleResults.length === 0}
                           onChange={(e) => handleSelectAll(e.target.checked)}
                           label="Select visible"
                           className="mb-0"
@@ -478,7 +525,7 @@ const SupplierSearch: React.FC = () => {
                   <tbody>
                     {paginatedResults.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="supplier-empty-state">
+                        <td colSpan={8} className="supplier-empty-state">
                           <i className="bi bi-search"></i>
                           <strong>No supplier results found</strong>
                           <span>Try another URL, approved PR, or result filter.</span>
@@ -491,11 +538,31 @@ const SupplierSearch: React.FC = () => {
                           <td><Badge className="supplier-category-badge">{result.category}</Badge></td>
                           <td className="supplier-item-cell">{result.itemDescription}</td>
                           <td className="supplier-price-cell">{formatCurrency(result.unitPrice)}</td>
-                          <td className="supplier-name-cell">{result.supplierName}</td>
+                          <td className="supplier-name-cell">
+                            <span>{result.supplierName}</span>
+                            {result.extractionWarning && (
+                              <small title={result.extractionWarning}>{result.extractionWarning}</small>
+                            )}
+                          </td>
+                          <td className="supplier-source-cell">
+                            <Badge className={`supplier-source-badge ${result.isValidSupplier ? 'supported' : 'unsupported'}`}>
+                              {result.sourceType || 'Unknown'}
+                            </Badge>
+                            <span title={result.url}>{getHostName(result.url)}</span>
+                          </td>
+                          <td>
+                            <Badge className={`supplier-quality-badge ${result.isValidSupplier ? 'review' : 'blocked'}`}>
+                              {statusLabel(result)}
+                            </Badge>
+                            {typeof result.confidence === 'number' && (
+                              <small className="supplier-confidence">{result.confidence}% confidence</small>
+                            )}
+                          </td>
                           <td className="text-center">
                             <Form.Check
                               type="checkbox"
                               checked={result.selected}
+                              disabled={!result.isValidSupplier}
                               onChange={() => handleSelectRow(result)}
                             />
                           </td>
