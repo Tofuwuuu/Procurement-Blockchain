@@ -8,17 +8,123 @@ import json
 import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
+from dataclasses import dataclass
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+@dataclass(frozen=True)
+class FabricOrgConfig:
+    """Runtime Fabric peer identity and connection settings loaded from env."""
+
+    name: str
+    peer_container: str
+    local_msp_id: str
+    tls_enabled: str
+    tls_root_cert_file: str
+    msp_config_path: str
+    peer_address: str
+
 
 class BlockchainClient:
     """Client for interacting with Hyperledger Fabric network"""
     
     def __init__(self):
-        self.channel_name = os.getenv("FABRIC_CHANNEL_NAME", "procurementchannel")
-        self.chaincode_name = os.getenv("FABRIC_CHAINCODE_NAME", "inspection")
-        self.peer_address = os.getenv("FABRIC_PEER_ADDRESS", "peer0.org1.example.com:7051")
-        self.orderer_address = os.getenv("FABRIC_ORDERER_ADDRESS", "orderer.example.com:7050")
-        self.network_dir = os.getenv("FABRIC_NETWORK_DIR", "../blockchain/network")
+        self.channel_name = self._required_env("FABRIC_CHANNEL_NAME")
+        self.chaincode_name = self._required_env("FABRIC_CHAINCODE_NAME")
+        self.orderer_address = self._required_env("FABRIC_ORDERER_ADDRESS")
+        self.orderer_tls_ca_file = self._required_env("FABRIC_ORDERER_TLS_CA_FILE")
+        self.submit_org = os.getenv("FABRIC_SUBMIT_ORG", "org1")
+        self.query_org = os.getenv("FABRIC_QUERY_ORG", self.submit_org)
+        self.peer_cli_mode = os.getenv("FABRIC_PEER_CLI_MODE", "docker").lower()
+        self.peer_cli_binary = os.getenv("FABRIC_PEER_CLI_BINARY", "peer")
+        self.docker_binary = os.getenv("FABRIC_DOCKER_BINARY", "docker")
+        self.connection_profile_path = os.getenv("FABRIC_CONNECTION_PROFILE")
+        self.network_dir = os.getenv("FABRIC_NETWORK_DIR")
         self.command_timeout_seconds = int(os.getenv("FABRIC_COMMAND_TIMEOUT_SECONDS", "60"))
+        self.invoke_peer_addresses = self._env_list("FABRIC_INVOKE_PEER_ADDRESSES")
+        self.invoke_tls_root_cert_files = self._env_list("FABRIC_INVOKE_TLS_ROOT_CERT_FILES")
+        self.query_peer_address = os.getenv("FABRIC_QUERY_PEER_ADDRESS")
+        self.query_tls_root_cert_file = os.getenv("FABRIC_QUERY_TLS_ROOT_CERT_FILE")
+
+    @staticmethod
+    def _required_env(name: str) -> str:
+        value = os.getenv(name)
+        if not value:
+            raise RuntimeError(f"{name} must be set for Fabric integration")
+        return value
+
+    @staticmethod
+    def _env_list(name: str) -> List[str]:
+        value = os.getenv(name, "")
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+    @staticmethod
+    def _org_env_name(org: str, suffix: str) -> str:
+        return f"FABRIC_{org.upper()}_{suffix}"
+
+    def _load_org_config(self, org: str) -> FabricOrgConfig:
+        return FabricOrgConfig(
+            name=org,
+            peer_container=self._required_env(self._org_env_name(org, "PEER_CONTAINER")),
+            local_msp_id=self._required_env(self._org_env_name(org, "LOCAL_MSP_ID")),
+            tls_enabled=os.getenv(self._org_env_name(org, "TLS_ENABLED"), "true"),
+            tls_root_cert_file=self._required_env(self._org_env_name(org, "TLS_ROOTCERT_FILE")),
+            msp_config_path=self._required_env(self._org_env_name(org, "MSPCONFIGPATH")),
+            peer_address=self._required_env(self._org_env_name(org, "PEER_ADDRESS")),
+        )
+
+    def _peer_env(self, org_config: FabricOrgConfig) -> Dict[str, str]:
+        env_vars = {
+            "CORE_PEER_LOCALMSPID": org_config.local_msp_id,
+            "CORE_PEER_TLS_ENABLED": org_config.tls_enabled,
+            "CORE_PEER_TLS_ROOTCERT_FILE": org_config.tls_root_cert_file,
+            "CORE_PEER_MSPCONFIGPATH": org_config.msp_config_path,
+            "CORE_PEER_ADDRESS": org_config.peer_address,
+        }
+        if self.connection_profile_path:
+            env_vars["FABRIC_CONNECTION_PROFILE"] = self.connection_profile_path
+        return env_vars
+
+    def _peer_command_args(self, env_vars: Dict[str, str], org_config: FabricOrgConfig, command: List[str]) -> List[str]:
+        if self.peer_cli_mode == "docker":
+            docker_cmd = [self.docker_binary, "exec"]
+            for key, value in env_vars.items():
+                docker_cmd.extend(["-e", f"{key}={value}"])
+            return docker_cmd + [org_config.peer_container, self.peer_cli_binary] + command
+
+        if self.peer_cli_mode == "local":
+            return [self.peer_cli_binary] + command
+
+        raise RuntimeError("FABRIC_PEER_CLI_MODE must be either 'docker' or 'local'")
+
+    def _chaincode_command(self, action: str, args: List[str], include_endorsement_peers: bool = False) -> List[str]:
+        ctor = {"Args": args}
+        command = [
+            "chaincode", action,
+            "--tls",
+            "--cafile", self.orderer_tls_ca_file,
+            "-C", self.channel_name,
+            "-n", self.chaincode_name,
+            "-c", json.dumps(ctor),
+        ]
+
+        if action == "invoke":
+            command[2:2] = ["-o", self.orderer_address]
+
+        if include_endorsement_peers:
+            if len(self.invoke_peer_addresses) != len(self.invoke_tls_root_cert_files):
+                raise RuntimeError(
+                    "FABRIC_INVOKE_PEER_ADDRESSES and FABRIC_INVOKE_TLS_ROOT_CERT_FILES must have the same number of entries"
+                )
+            for peer_address, tls_root_cert_file in zip(self.invoke_peer_addresses, self.invoke_tls_root_cert_files):
+                command.extend(["--peerAddresses", peer_address, "--tlsRootCertFiles", tls_root_cert_file])
+        elif self.query_peer_address and self.query_tls_root_cert_file:
+            command.extend(["--peerAddresses", self.query_peer_address, "--tlsRootCertFiles", self.query_tls_root_cert_file])
+
+        return command
 
     @staticmethod
     def _is_already_locked_error(err: str) -> bool:
@@ -33,50 +139,29 @@ class BlockchainClient:
         
     def _run_peer_command(self, command: List[str], org: str = "org1") -> Dict:
         """
-        Execute a peer command via Docker
+        Execute a peer command using the configured Fabric CLI runtime.
         
         Args:
             command: List of command arguments
-            org: Organization (org1 or org2)
+            org: Organization key configured with FABRIC_<ORG>_* variables
         
         Returns:
             Dict with success status and result/error
         """
-        # Guard against accidental typos in org name
-        if org not in ("org1", "org2"):
-            org = "org1"
-
-        peer_container = f"peer0.{org}.example.com"
-
-        # Peer containers are configured with TLS enabled (docker-compose).
-        # Use Org Admin identity (mounted at /work/crypto-config) so policies like
-        # /Channel/Application/Readers and Writers are satisfied.
-        env_vars = {
-            "CORE_PEER_LOCALMSPID": f"{org.capitalize()}MSP",
-            "CORE_PEER_TLS_ENABLED": "true",
-            "CORE_PEER_TLS_ROOTCERT_FILE": f"/work/crypto-config/peerOrganizations/{org}.example.com/peers/{peer_container}/tls/ca.crt",
-            "CORE_PEER_MSPCONFIGPATH": f"/work/crypto-config/peerOrganizations/{org}.example.com/users/Admin@{org}.example.com/msp",
-            "CORE_PEER_ADDRESS": f"{peer_container}:{7051 if org == 'org1' else 9051}",
-        }
-        
-        # Build docker exec command
-        docker_cmd = [
-            "docker", "exec",
-            "-e", f"CORE_PEER_LOCALMSPID={env_vars['CORE_PEER_LOCALMSPID']}",
-            "-e", f"CORE_PEER_TLS_ENABLED={env_vars['CORE_PEER_TLS_ENABLED']}",
-            "-e", f"CORE_PEER_TLS_ROOTCERT_FILE={env_vars['CORE_PEER_TLS_ROOTCERT_FILE']}",
-            "-e", f"CORE_PEER_MSPCONFIGPATH={env_vars['CORE_PEER_MSPCONFIGPATH']}",
-            "-e", f"CORE_PEER_ADDRESS={env_vars['CORE_PEER_ADDRESS']}",
-            peer_container,
-            "peer"
-        ] + command
-        
         try:
+            org_config = self._load_org_config(org)
+            env_vars = self._peer_env(org_config)
+            peer_cmd = self._peer_command_args(env_vars, org_config, command)
+            command_env = os.environ.copy()
+            command_env.update(env_vars)
+
             result = subprocess.run(
-                docker_cmd,
+                peer_cmd,
                 capture_output=True,
                 text=True,
-                timeout=self.command_timeout_seconds
+                timeout=self.command_timeout_seconds,
+                cwd=self.network_dir or None,
+                env=command_env,
             )
             
             if result.returncode == 0:
@@ -105,35 +190,12 @@ class BlockchainClient:
             }
 
     def _invoke_contract(self, args: List[str]) -> Dict:
-        ctor = {"Args": args}
-        command = [
-            "chaincode", "invoke",
-            "-o", self.orderer_address,
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-            "--peerAddresses", "peer0.org2.example.com:9051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt",
-        ]
-        return self._run_peer_command(command, org="org1")
+        command = self._chaincode_command("invoke", args, include_endorsement_peers=True)
+        return self._run_peer_command(command, org=self.submit_org)
 
     def _query_contract(self, args: List[str]) -> Dict:
-        ctor = {"Args": args}
-        command = [
-            "chaincode", "query",
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-        ]
-        return self._run_peer_command(command, org="org1")
+        command = self._chaincode_command("query", args)
+        return self._run_peer_command(command, org=self.query_org)
 
     @staticmethod
     def _parse_query_result(result: Dict, not_found_message: str = "Record not found") -> Dict:
@@ -250,35 +312,16 @@ class BlockchainClient:
 
         # Fabric contract-api uses "ContractName:functionName" as the first arg.
         # Our contract name is InspectionContract (see chaincode constructor).
-        ctor = {
-            "Args": [
-                "InspectionContract:recordInspection",
-                inspection_id,
-                po_number,
-                inspection_date,
-                inspected_by,
-                status,
-                items_json,
-                overall_remarks or "",
-            ]
-        }
-
-        command = [
-            "chaincode", "invoke",
-            "-o", self.orderer_address,
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-            "--peerAddresses", "peer0.org2.example.com:9051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt",
-        ]
-        
-        # Use org1 peer container to submit the tx
-        result = self._run_peer_command(command, org="org1")
+        result = self._invoke_contract([
+            "InspectionContract:recordInspection",
+            inspection_id,
+            po_number,
+            inspection_date,
+            inspected_by,
+            status,
+            items_json,
+            overall_remarks or "",
+        ])
         
         if result["success"]:
             # After successful invoke, wait for commit, then query to get the txId
@@ -347,19 +390,7 @@ class BlockchainClient:
         Returns:
             Dict with inspection record or error
         """
-        ctor = {"Args": ["InspectionContract:getInspection", inspection_id]}
-        command = [
-            "chaincode", "query",
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-        ]
-        
-        result = self._run_peer_command(command, org="org1")
+        result = self._query_contract(["InspectionContract:getInspection", inspection_id])
         
         if result["success"]:
             try:
@@ -389,19 +420,7 @@ class BlockchainClient:
         Returns:
             Dict with list of inspection records
         """
-        ctor = {"Args": ["InspectionContract:getInspectionByPO", po_number]}
-        command = [
-            "chaincode", "query",
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-        ]
-        
-        result = self._run_peer_command(command, org="org1")
+        result = self._query_contract(["InspectionContract:getInspectionByPO", po_number])
         
         if result["success"]:
             try:
@@ -431,19 +450,7 @@ class BlockchainClient:
         Returns:
             Dict with verification result
         """
-        ctor = {"Args": ["InspectionContract:verifyInspection", inspection_id]}
-        command = [
-            "chaincode", "query",
-            "--tls",
-            "--cafile", "/work/artifacts/orderer_tls_ca.crt",
-            "-C", self.channel_name,
-            "-n", self.chaincode_name,
-            "-c", json.dumps(ctor),
-            "--peerAddresses", "peer0.org1.example.com:7051",
-            "--tlsRootCertFiles", "/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt",
-        ]
-        
-        result = self._run_peer_command(command, org="org1")
+        result = self._query_contract(["InspectionContract:verifyInspection", inspection_id])
         
         if result["success"]:
             try:

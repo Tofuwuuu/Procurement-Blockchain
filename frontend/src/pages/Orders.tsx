@@ -723,11 +723,11 @@ const Orders: React.FC = () => {
       )}
 
       {/* Header Section */}
-      <div className="orders-page-header">
+      <div className={`orders-page-header ${user?.role === 'employee' ? 'purchase-request-hero' : ''}`}>
         <div>
           <div className="orders-eyebrow">{user?.role === 'employee' ? 'Request Desk' : 'Procurement Orders'}</div>
           <h1 className="mb-1">
-            <i className="bi bi-cart-check"></i>
+            <i className={user?.role === 'employee' ? 'bi bi-file-earmark-text' : 'bi bi-cart-check'}></i>
             {user?.role === 'employee' ? 'Purchase Requests' : 'Purchase Orders'}
           </h1>
           <p className="orders-page-subtitle mb-0">
@@ -736,46 +736,128 @@ const Orders: React.FC = () => {
               : 'Review completed purchase requests and manage purchase order activity.'}
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={handleShowModal}
-          className="orders-primary-action"
-        >
-          <i className="bi bi-plus-circle me-2"></i>
-          {user?.role === 'employee' ? 'New Request' : 'New Order'}
-        </Button>
+        <div className="orders-header-actions">
+          <Button
+            variant="outline-primary"
+            onClick={fetchData}
+            className="orders-secondary-action"
+          >
+            <i className="bi bi-arrow-clockwise me-2"></i>
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleShowModal}
+            className="orders-primary-action"
+          >
+            <i className="bi bi-plus-circle me-2"></i>
+            {user?.role === 'employee' ? 'New Request' : 'New Order'}
+          </Button>
+        </div>
       </div>
 
       {/* Employee Purchase Request List */}
       {user?.role === 'employee' ? (
-        <Card>
-          <Card.Body className="p-0">
-            <div className="table-responsive">
-              <Table striped bordered className="mb-0">
-                <thead className="bg-light">
-                  <tr>
-                    <th>STATUS</th>
-                    <th>DATE REQUESTED</th>
-                    <th>REQUESTED BY</th>
-                    <th>P.R. NUMBER</th>
-                    <th>REMARK</th>
-                    <th>DETAILS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders
-                    .filter(order => order.po_number.startsWith('PR-') || user?.role === 'employee')
-                    .map((order) => {
+        <>
+          <Row className="g-3 mb-3">
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card pr-summary-card">
+                <Card.Body>
+                  <span>Total Requests</span>
+                  <strong>{orderStats.total}</strong>
+                  <small>Submitted by your account</small>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-warning pr-summary-card">
+                <Card.Body>
+                  <span>Pending / Draft</span>
+                  <strong>{orderStats.pending + orderStats.draft}</strong>
+                  <small>Waiting for processing</small>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-success pr-summary-card">
+                <Card.Body>
+                  <span>Approved</span>
+                  <strong>{orders.filter(order => order.status === 'Approved').length}</strong>
+                  <small>Ready for next step</small>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col sm={6} lg={3}>
+              <Card className="orders-stat-card accent-primary pr-summary-card">
+                <Card.Body>
+                  <span>Total Value</span>
+                  <strong>{formatCurrency(orderStats.totalValue)}</strong>
+                  <small>Estimated request amount</small>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          <Card className="orders-list-card purchase-request-register">
+            <Card.Body className="p-0">
+              <div className="orders-list-toolbar">
+                <div>
+                  <h5>Request Register</h5>
+                  <span>{filteredOrders.length} of {orders.length} requests shown</span>
+                </div>
+                <div className="orders-list-controls">
+                  <InputGroup className="orders-search-control">
+                    <InputGroup.Text>
+                      <i className="bi bi-search"></i>
+                    </InputGroup.Text>
+                    <Form.Control
+                      placeholder="Search PR number, requester, status..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </InputGroup>
+                  <Form.Select
+                    className="orders-status-filter"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    aria-label="Filter purchase requests by status"
+                  >
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>
+                        {status === 'All' ? 'All statuses' : status}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </div>
+              </div>
+              {filteredOrders.length > 0 ? (
+                <div className="table-responsive">
+                  <Table hover className="orders-table purchase-request-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th>P.R. Number</th>
+                        <th>Requested By</th>
+                        <th>Date Requested</th>
+                        <th>Remark</th>
+                        <th className="text-end">Amount</th>
+                        <th className="text-end">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOrders
+                        .filter(order => order.po_number.startsWith('PR-') || user?.role === 'employee')
+                        .map((order) => {
                       let statusBadge = <Badge bg="warning">Pending</Badge>;
                       if (order.status === 'Approved') {
-                        statusBadge = <Badge bg="success">Approved</Badge>;
+                        statusBadge = <Badge className="orders-status-badge orders-status-approved">Approved</Badge>;
                       } else if (order.status === 'Draft' || order.status === 'Pending') {
-                        statusBadge = <Badge bg="warning">Pending</Badge>;
+                        statusBadge = <Badge className="orders-status-badge orders-status-pending">Pending</Badge>;
                       } else if (order.status === 'Completed') {
-                        statusBadge = <Badge bg="info">For Canvass</Badge>;
+                        statusBadge = <Badge className="orders-status-badge orders-status-completed">For Canvass</Badge>;
                       }
                       
-                      const dateRequested = new Date(order.date_created).toISOString().split('T')[0];
+                      const dateRequested = formatDate(order.date_created);
                       const prNumber = order.po_number.startsWith('PR-') ? order.po_number : 'N/A';
                       
                       let remark = order.notes || 'No remarks';
@@ -790,14 +872,16 @@ const Orders: React.FC = () => {
                       return (
                         <tr key={order.id}>
                           <td>{statusBadge}</td>
-                          <td>{dateRequested}</td>
-                          <td>{requestedBy}</td>
-                          <td>{prNumber}</td>
-                          <td>
-                            <span className="text-danger">{remark}</span>
+                          <td className="orders-number">{prNumber}</td>
+                          <td className="orders-supplier">{requestedBy}</td>
+                          <td className="text-nowrap">{dateRequested}</td>
+                          <td className="purchase-request-remark">
+                            {remark}
                           </td>
-                          <td>
+                          <td className="orders-amount">{formatCurrency(order.total_amount || 0)}</td>
+                          <td className="text-end">
                             <Button
+                              className="orders-action-button"
                               variant="outline-primary"
                               size="sm"
                               onClick={() => {
@@ -805,25 +889,26 @@ const Orders: React.FC = () => {
                                 setShowItemsModal(true);
                               }}
                             >
-                              <i className="bi bi-file-earmark-text me-1"></i>
+                              <i className="bi bi-eye me-1"></i>
                               View
                             </Button>
                           </td>
                         </tr>
                       );
                     })}
-                  {orders.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-4 text-muted">
-                        No purchase requests found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </div>
-          </Card.Body>
-        </Card>
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="orders-empty-state">
+                  <i className="bi bi-inbox"></i>
+                  <strong>{searchTerm ? 'No requests match your search' : 'No purchase requests found'}</strong>
+                  <span>Try clearing filters or create a new purchase request.</span>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </>
       ) : (
         <>
           <Row className="g-3 mb-3">

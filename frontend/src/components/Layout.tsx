@@ -336,7 +336,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 
                 {/* Reports dropdown - Admin gets full access, others get role-based access (excluding custodian and admin) */}
                 {user?.role !== 'custodian' && !user?.is_admin && (
-                  <Dropdown as={Nav.Item} className="d-flex align-items-center">
+                  <Dropdown as={Nav.Item} className="d-flex align-items-center report-nav-dropdown">
                     <Dropdown.Toggle 
                       as={Nav.Link} 
                       className="d-flex align-items-center nav-item-custom"
@@ -346,6 +346,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                       <i className="bi bi-chevron-down ms-1"></i>
                     </Dropdown.Toggle>
                     <Dropdown.Menu className="dropdown-menu-custom">
+                    <div className="dropdown-section-label">Report Center</div>
                     {/* Admin role - ALL REPORTS ACCESS */}
                     {user?.is_admin && (
                       <>
@@ -411,6 +412,16 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                         <Dropdown.Item as={Link} to="/reports/blockchain" className="dropdown-item-custom">
                           <i className="bi bi-link-45deg me-2"></i>
                           Blockchain Transaction Reports
+                        </Dropdown.Item>
+                      </>
+                    )}
+
+                    {/* Employee role - request-focused report shortcut */}
+                    {user?.role === 'employee' && !user?.is_admin && (
+                      <>
+                        <Dropdown.Item as={Link} to="/purchase-request" className="dropdown-item-custom">
+                          <i className="bi bi-file-earmark-text me-2"></i>
+                          Purchase Request Register
                         </Dropdown.Item>
                       </>
                     )}

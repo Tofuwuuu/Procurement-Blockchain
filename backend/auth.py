@@ -8,22 +8,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # JWT settings
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET or len(JWT_SECRET) < 32:
+    raise RuntimeError("JWT_SECRET must be set to a strong value of at least 32 characters")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     try:
-        # Check if it's a bcrypt hash
-        if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
-            # Encode password to bytes
-            password_bytes = plain_password.encode('utf-8')
-            hash_bytes = hashed_password.encode('utf-8')
-            return bcrypt.checkpw(password_bytes, hash_bytes)
-        else:
-            # Plain text comparison (for existing data)
-            return plain_password == hashed_password
+        if not hashed_password.startswith(("$2a$", "$2b$", "$2y$")):
+            return False
+
+        password_bytes = plain_password.encode('utf-8')
+        hash_bytes = hashed_password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, hash_bytes)
     except Exception:
         return False
 
@@ -43,13 +43,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
 
 def decode_access_token(token: str):
     """Decode and verify a JWT token"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None

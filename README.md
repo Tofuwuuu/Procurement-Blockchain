@@ -1,321 +1,328 @@
-# 🔗 Blockchain Procurement Management System
+# Blockchain Procurement Management System
 
-A full-stack procurement management platform with **React/TypeScript frontend** and a **FastAPI + MongoDB backend**. The backend also includes a supplier-search feature powered by web scraping utilities under `backend/Scraping/`.
+A full-stack procurement management platform built for Philippine government procurement workflows. The frontend is a React/TypeScript SPA; the backend is a FastAPI + MongoDB API with Hyperledger Fabric used as an immutable audit ledger for inspection and procurement events.
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9.0-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## ✨ Features
+## Features
 
-### 🔗 Blockchain Core
-- **Proof-of-Work Consensus**: SHA-256 hashing with configurable difficulty
-- **P2P Networking**: UDP multicast discovery + Socket.IO peer messaging
-- **Smart Contracts**: Business rule validation for procurement operations
-- **Chain Synchronization**: Automatic peer discovery and chain consensus
-- **Mining System**: Configurable mining rewards and block generation
+### Procurement Workflow
+- **Purchase Requests** — create, review, and multi-stage approval by role
+- **Canvassing & Suppliers** — abstract of canvass, supplier CRUD with Philippine compliance fields
+- **Purchase Orders** — create, approve, and track
+- **Deliveries, Invoices & Payments** — full lifecycle through disbursement voucher
+- **Inspections** — inspection reports recorded on Hyperledger Fabric for tamper-evident audit
 
-### 🏢 Procurement Management
-- **Supplier Management**: Complete CRUD operations with Philippine compliance
-- **Purchase Orders**: Create, approve, and track procurement orders
-- **Inventory Control**: Real-time stock tracking and adjustments
-- **Audit Logs**: Immutable blockchain-based transaction history
-- **Dashboard Analytics**: Real-time statistics and reporting
+### Inventory & Property
+- **Inventory Transfer Reports** — track asset movement between units
+- **Property Transfer / Return Slips** — custodian and property return forms
+- **Waste Materials Reports** — disposal documentation
+- **Custodian Slips** — hand-receipt generation
 
-### 🎨 Frontend Features
-- **Modern UI**: Bootstrap 5 with Philippine-themed design
-- **Responsive Design**: Mobile-first approach with accessibility compliance
-- **Real-time Updates**: Live blockchain explorer and peer monitoring
-- **Role-based Access**: Admin and user permission systems
-- **Form Validation**: Comprehensive client and server-side validation
+### Platform
+- **Audit Logs** — every workflow status change is captured in MongoDB
+- **Blockchain Explorer** — view Fabric-recorded procurement events and verify on-chain
+- **Supplier Search** — web-scraping utility for external supplier discovery
+- **Role-based Access** — admin, canvasser, validator, finance, auditor, and custodian roles
+- **Dashboard Analytics** — real-time statistics across all procurement stages
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Frontend (React/TS)                     │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │  Dashboard  │ │ Blockchain  │ │  Procurement Mgmt   │   │
-│  │   Analytics │ │   Explorer  │ │   (Orders/Suppliers)│   │
-│  └─────────────┘ └─────────────┘ └─────────────────────┘   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ REST API + WebSocket
-┌─────────────────────▼───────────────────────────────────────┐
-│                  Backend (FastAPI)                         │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐   │
-│  │  FastAPI    │ │   MongoDB   │ │   Authentication    │   │
-│  │   Server    │ │ (Motor async│ │     (JWT)           │   │
-│  └─────────────┘ └─────────────┘ └─────────────────────┘   │
-│  ┌─────────────┐                                          │
-│  │ Supplier     │  (web scraping + saved results)          │
-│  │ Search       │                                          │
-│  └─────────────┘                                          │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                   Frontend (React/TS :3000)                │
+│   Dashboard  │  Procurement Workflow  │  Blockchain UI     │
+└──────────────────────────┬─────────────────────────────────┘
+                           │  REST/JWT  (CRA proxy → :8000)
+┌──────────────────────────▼─────────────────────────────────┐
+│                  Backend (FastAPI :8000)                   │
+│   Auth/JWT  │  Procurement Routes  │  Fabric Proxy         │
+│                    Motor (async)                           │
+│                    MongoDB :27017                          │
+└──────────────────────────┬─────────────────────────────────┘
+                           │  docker exec peer
+┌──────────────────────────▼─────────────────────────────────┐
+│           Hyperledger Fabric (Docker)                      │
+│   procurementchannel  │  inspection chaincode              │
+└────────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.10+ (recommended)
-- Node.js 18+ (for the React frontend)
-- MongoDB (local or remote)
-- Git
+- Python 3.10+
+- Node.js 18+
+- MongoDB (local or Atlas)
+- Docker Desktop (required only for Hyperledger Fabric audit features)
 
-### Installation
+### 1. Backend
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/blockchain-procurement.git
-   cd blockchain-procurement
-   ```
-
-2. **Backend Setup**
-   ```bash
-   cd backend
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
-   uvicorn main:app --reload --host 0.0.0.0 --port 3003
-   ```
-
-3. **Frontend Setup** (in a new terminal)
-   ```bash
-   cd frontend
-   npm install
-   npm start
-   ```
-
-4. **Access the Application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3003
-   - API docs: http://localhost:3003/docs
-
-### Running Multiple Nodes
-
-```bash
-# Terminal 1: Genesis node
-cd backend && npm run start:genesis
-
-# Terminal 2: Peer node
-cd backend && npm run start:peer
-
-# Terminal 3: Additional peer
-cd backend && node node.js --port 3004 --peer localhost --peer-port 3003
-```
-
-## 📖 Usage
-
-### Blockchain Operations
-
-#### Mining Blocks
-```bash
-curl -X GET http://localhost:3003/mine
-```
-
-#### Create Transaction
-```bash
-curl -X POST http://localhost:3003/transactions/new \
-  -H "Content-Type: application/json" \
-  -d '{
-    "from": "user123",
-    "to": "supplier456",
-    "amount": 1000,
-    "action": "order_created",
-    "data": {
-      "order_id": "PO-2024-001",
-      "supplier_id": 456,
-      "total_amount": 1000
-    }
-  }'
-```
-
-#### View Blockchain
-```bash
-curl http://localhost:3003/chain
-```
-
-### Smart Contracts
-
-The system includes built-in smart contracts for:
-
-- **Order Management**: `order_created`, `order_approved`
-- **Shipment Tracking**: `shipment_created`, `shipment_delivered`
-- **Payment Processing**: `payment_processed`
-- **Inventory Control**: `inventory_adjusted`
-- **Supplier Management**: `supplier_registered`
-
-### Frontend Features
-
-- **Dashboard**: Real-time blockchain statistics and recent transactions
-- **Blockchain Explorer**: View blocks, transactions, and mining status
-- **Supplier Management**: Add, edit, and manage supplier information
-- **Order Processing**: Create and track purchase orders
-- **Inventory Tracking**: Monitor stock levels and adjustments
-- **User Management**: Role-based access control
-
-## 🔧 Configuration
-
-### Environment Variables
-
-**Backend (.env)**
-```env
-PORT=3003
-NODE_ENV=development
-JWT_SECRET=your-secret-key
-BLOCKCHAIN_DIFFICULTY=4
-MINING_REWARD=100
-```
-
-**Frontend (.env)**
-```env
-REACT_APP_API_URL=http://localhost:3003
-REACT_APP_ENVIRONMENT=development
-```
-
-### Network Settings
-
-- **UDP Multicast**: `224.0.0.1:5000`
-- **Socket.IO**: Configurable port (default: 3003)
-- **HTTP API**: REST endpoints on configured port
-
-## 🧪 Testing
-
-```bash
-# Backend tests
+```powershell
 cd backend
-npm test
-
-# Frontend tests
-cd frontend
-npm test
-npm run test:coverage
+python -m venv .venv
+.venv\Scripts\Activate.ps1          # Windows PowerShell
+pip install -r requirements.txt
+python main.py                       # starts on http://localhost:8000
 ```
 
-## 📊 API Documentation
+Interactive API docs are available at **http://localhost:8000/docs** once the server is running.
 
-### Blockchain Endpoints
+### 2. Frontend
+
+Open a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm start                            # starts on http://localhost:3000
+```
+
+The React dev server proxies all `/api/*` requests to `http://localhost:8000`.
+
+### 3. MongoDB
+
+Default connection: `mongodb://localhost:27017`, database `procurement`. Override with the `MONGO_URL` and `DATABASE_NAME` environment variables.
+
+### 4. Hyperledger Fabric (optional)
+
+Required only for on-chain inspection recording. Follow `backend/blockchain/network/QUICK_START.md` to:
+
+1. Generate crypto material and channel artifacts
+2. Start the Docker network: `docker compose -f backend/blockchain/network/docker-compose-fabric.yml up -d`
+3. Deploy chaincode: run `backend/blockchain/network/deploy-chaincode.ps1`
+
+The backend degrades gracefully when Fabric is unavailable — procurement data continues to save to MongoDB.
+
+## Environment Variables
+
+Create a `.env` file in `backend/`. Security and Fabric settings are loaded from environment variables so deployments can provide different origins, credentials, paths, peer containers, and connection profiles without code changes:
+
+```env
+MONGO_URL=mongodb://localhost:27017
+DATABASE_NAME=procurement
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
+
+FABRIC_PEER_CLI_MODE=docker
+FABRIC_DOCKER_BINARY=docker
+FABRIC_PEER_CLI_BINARY=peer
+FABRIC_COMMAND_TIMEOUT_SECONDS=60
+FABRIC_CONNECTION_PROFILE=
+
+FABRIC_CHANNEL_NAME=procurementchannel
+FABRIC_CHAINCODE_NAME=inspection
+FABRIC_ORDERER_ADDRESS=orderer.example.com:7050
+FABRIC_ORDERER_TLS_CA_FILE=/work/artifacts/orderer_tls_ca.crt
+FABRIC_SUBMIT_ORG=org1
+FABRIC_QUERY_ORG=org1
+
+FABRIC_ORG1_PEER_CONTAINER=peer0.org1.example.com
+FABRIC_ORG1_LOCAL_MSP_ID=Org1MSP
+FABRIC_ORG1_TLS_ENABLED=true
+FABRIC_ORG1_TLS_ROOTCERT_FILE=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+FABRIC_ORG1_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+FABRIC_ORG1_PEER_ADDRESS=peer0.org1.example.com:7051
+
+FABRIC_ORG2_PEER_CONTAINER=peer0.org2.example.com
+FABRIC_ORG2_LOCAL_MSP_ID=Org2MSP
+FABRIC_ORG2_TLS_ENABLED=true
+FABRIC_ORG2_TLS_ROOTCERT_FILE=/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+FABRIC_ORG2_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+FABRIC_ORG2_PEER_ADDRESS=peer0.org2.example.com:9051
+
+FABRIC_INVOKE_PEER_ADDRESSES=peer0.org1.example.com:7051,peer0.org2.example.com:9051
+FABRIC_INVOKE_TLS_ROOT_CERT_FILES=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+FABRIC_QUERY_PEER_ADDRESS=peer0.org1.example.com:7051
+FABRIC_QUERY_TLS_ROOT_CERT_FILE=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+```
+
+Production frontend builds read `REACT_APP_API_URL` from a `.env` file in `frontend/`.
+
+## API Reference
+
+All endpoints are also browsable at **http://localhost:8000/docs** (Swagger UI) and **http://localhost:8000/redoc**.
+
+### System
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Node health check |
-| GET | `/status` | Comprehensive node status |
-| GET | `/chain` | Get full blockchain |
-| GET | `/chain/block/:index` | Get specific block |
-| POST | `/transactions/new` | Create new transaction |
-| GET | `/mine` | Mine pending transactions |
-| GET | `/peers` | List connected peers |
-| POST | `/add_peer` | Add new peer |
-
-### Procurement Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
+| GET | `/` | Root health check |
+| GET | `/health` | Detailed health status |
 | GET | `/api/stats` | Dashboard statistics |
-| GET | `/api/suppliers` | Supplier management |
-| GET | `/api/orders` | Purchase order management |
-| GET | `/api/inventory` | Inventory tracking |
-| POST | `/api/auth/login` | User authentication |
+| GET | `/api/test` | API connectivity test |
 
-## 🛠️ Technology Stack
+### Authentication
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | Login, returns JWT |
+| GET | `/api/auth/me` | Current user profile |
+| GET | `/api/auth/verify` | Verify JWT token |
+
+### Purchase Requests
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/purchase-requests` | Create purchase request |
+| GET | `/api/purchase-requests` | List purchase requests |
+| GET | `/api/purchase-requests/{pr_id}` | Get purchase request |
+| PUT | `/api/purchase-requests/{pr_id}` | Update / advance workflow |
+
+### Suppliers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/suppliers` | List suppliers |
+| POST | `/api/suppliers` | Create supplier |
+| GET | `/api/suppliers/{supplier_id}` | Get supplier |
+| PUT | `/api/suppliers/{supplier_id}` | Update supplier |
+| DELETE | `/api/suppliers/{supplier_id}` | Delete supplier |
+| POST | `/api/suppliers/award` | Award abstract of canvass |
+
+### Purchase Orders
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/orders` | Create purchase order |
+| GET | `/api/orders` | List purchase orders |
+| GET | `/api/orders/{order_id}` | Get purchase order |
+| PUT | `/api/orders/{order_id}` | Update purchase order |
+| POST | `/api/orders/{order_id}/approve` | Approve purchase order |
+
+### Deliveries, Invoices & Payments
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/deliveries` | Create delivery receipt |
+| GET | `/api/deliveries` | List delivery receipts |
+| GET | `/api/deliveries/{receipt_id}` | Get delivery receipt |
+| PUT | `/api/deliveries/{receipt_id}` | Update delivery receipt |
+| POST | `/api/invoices` | Create invoice |
+| GET | `/api/invoices` | List invoices |
+| GET | `/api/invoices/{invoice_number}` | Get invoice |
+| PUT | `/api/invoices/{invoice_number}` | Update invoice |
+| POST | `/api/payments` | Create payment |
+| GET | `/api/payments` | List payments |
+| PUT | `/api/payments/{payment_number}` | Update payment |
+| POST | `/api/payments/{payment_number}/approve` | Approve payment |
+| GET | `/api/disbursement-vouchers` | List disbursement vouchers |
+
+### Inspections
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/inspections` | List inspections |
+| GET | `/api/inspections/{po_number}` | Get inspection by PO |
+| GET | `/api/inspections/check/{po_number}` | Check inspection status |
+| POST | `/api/inspection-reports` | Submit inspection report (recorded on Fabric) |
+| GET | `/api/inspection-reports` | List inspection reports |
+| POST | `/api/inspected` | Mark items as inspected |
+| GET | `/api/inspected` | List inspected items |
+
+### Property & Inventory
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/custodian-slips` | Create custodian slip |
+| GET | `/api/custodian-slips` | List custodian slips |
+| POST | `/api/inventory-transfer-reports` | Create ITR |
+| GET | `/api/inventory-transfer-reports` | List ITRs |
+| GET | `/api/inventory-transfer-reports/{itr_id}` | Get ITR |
+| POST | `/api/property-transfer-reports` | Create PTR |
+| GET | `/api/property-transfer-reports` | List PTRs |
+| GET | `/api/property-transfer-reports/{ptr_id}` | Get PTR |
+| POST | `/api/property-return-slips` | Create property return slip |
+| GET | `/api/property-return-slips` | List property return slips |
+| GET | `/api/property-return-slips/{slip_id}` | Get property return slip |
+| POST | `/api/waste-materials-reports` | Create waste materials report |
+| GET | `/api/waste-materials-reports` | List waste materials reports |
+| GET | `/api/waste-materials-reports/{id}` | Get waste materials report |
+
+### Blockchain / Audit
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/blockchain/events` | List all on-chain procurement events |
+| GET | `/api/blockchain/events/{event_id}` | Get event detail |
+| GET | `/api/blockchain/events/{event_id}/verify` | Verify event on Fabric |
+| GET | `/api/blockchain/inspections` | List on-chain inspection records |
+| GET | `/api/blockchain/inspections/{inspection_id}` | Get on-chain inspection |
+| GET | `/api/blockchain/inspections/po/{po_number}` | Get on-chain inspection by PO |
+| GET | `/api/blockchain/inspections/{inspection_id}/verify` | Verify inspection on Fabric |
+| POST | `/api/blockchain/inspections/sync` | Sync inspection records from Fabric |
+
+### Other
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/audit-logs` | System audit log |
+| GET | `/api/connections` | Active client connections + Fabric status |
+| POST | `/api/connection/ping` | Heartbeat from browser client |
+
+## Technology Stack
 
 ### Backend
-- **Node.js 18+** - Runtime environment
-- **Express.js** - Web framework
-- **Socket.IO** - Real-time communication
-- **SQLite** - Database
-- **JWT** - Authentication
-- **bcrypt** - Password hashing
-- **SHA-256** - Cryptographic hashing
+- **Python 3.13** — runtime
+- **FastAPI** — web framework
+- **Motor / PyMongo** — async MongoDB driver
+- **Pydantic v2** — data validation and serialization
+- **python-jose** — JWT authentication
+- **bcrypt** — password hashing
+- **Uvicorn** — ASGI server
+- **BeautifulSoup4 / lxml** — supplier web scraping
 
 ### Frontend
-- **React 18.2.0** - UI framework
-- **TypeScript 4.9.0** - Type safety
-- **Bootstrap 5.3.0** - UI components
-- **React Router DOM** - Client-side routing
-- **Axios** - HTTP client
-- **React Testing Library** - Testing framework
+- **React 18.2** — UI framework
+- **TypeScript 4.9** — type safety
+- **Bootstrap 5.3** — component library
+- **React Router DOM 6** — client-side routing
+- **Axios** — HTTP client
 
-## 🔒 Security Features
+### Blockchain / Infrastructure
+- **Hyperledger Fabric 2.5** — permissioned ledger for audit events
+- **CouchDB 3.2** — Fabric state database
+- **MongoDB** — primary application database
 
-- **Transaction Validation**: Smart contract enforcement
-- **Chain Integrity**: SHA-256 hash verification
-- **Peer Authentication**: Node ID validation
-- **Input Sanitization**: Request validation and sanitization
-- **JWT Authentication**: Secure user sessions
-- **Role-based Access**: Admin and user permissions
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-blockchain-procurement/
-├── backend/                 # Node.js blockchain backend
-│   ├── blockchain.js       # Core blockchain implementation
-│   ├── p2p.js             # P2P networking layer
-│   ├── consensus.js       # Consensus mechanism
-│   ├── contracts.js       # Smart contract validation
-│   ├── node.js            # Main node application
-│   └── package.json       # Backend dependencies
-├── frontend/               # React TypeScript frontend
+BLOCKCHAIN/
+├── backend/
+│   ├── main.py                  # FastAPI app, all routes (~3700 lines)
+│   ├── auth.py                  # JWT helpers
+│   ├── database.py              # MongoDB connection
+│   ├── workflow_config.py       # Multi-stage approval rules
+│   ├── requirements.txt         # Python dependencies
+│   ├── api/
+│   │   └── blockchain_client.py # Hyperledger Fabric integration
+│   ├── blockchain/
+│   │   ├── chaincode/           # Fabric inspection smart contract (Node.js)
+│   │   └── network/             # Docker Compose, channel config, scripts
+│   ├── Connection/
+│   │   └── Connector.py         # In-memory client heartbeat registry
+│   └── Scraping/
+│       └── supplier_api.py      # Supplier web search routes
+├── frontend/
 │   ├── src/
-│   │   ├── components/    # Reusable UI components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API and data services
-│   │   ├── contexts/      # React contexts
-│   │   └── types/         # TypeScript type definitions
-│   └── package.json       # Frontend dependencies
-├── LICENSE                 # MIT License
-└── README.md              # This file
+│   │   ├── components/          # Reusable UI components
+│   │   ├── pages/               # Page components
+│   │   ├── services/api.ts      # Axios API client
+│   │   └── contexts/            # Auth and app state contexts
+│   └── package.json             # React dependencies + proxy config
+├── docs/                        # Architecture notes and analysis
+└── README.md
 ```
 
-## 🤝 Contributing
+## Security Notes
 
-We welcome contributions! Please follow these steps:
+- Set `SECRET_KEY` in `.env` before any deployment — the default value is not secure.
+- CORS is currently open (`allow_origins=["*"]`). Restrict this to your frontend origin in production.
+- The `verify_password` function accepts plaintext passwords for legacy data migration. Migrate all users to bcrypt hashes before going to production.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## License
 
-### Development Guidelines
-
-- Follow existing code style and conventions
-- Add tests for new functionality
-- Update documentation as needed
-- Ensure all tests pass before submitting PR
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with Node.js, Express, React, and TypeScript
-- Inspired by blockchain principles and distributed systems
-- Designed for Philippine procurement compliance
-- Educational and development purposes
-
-## 📞 Support
-
-For questions and support:
-
-- **Issues**: Create an issue on GitHub
-- **Documentation**: Check the README files in backend/ and frontend/
-- **Examples**: Review the code examples and API documentation
-
-## 🔮 Roadmap
-
-- [ ] Docker containerization
-- [ ] Enhanced smart contract system
-- [ ] Mobile application
-- [ ] Advanced analytics dashboard
-- [ ] Integration with external APIs
-- [ ] Performance optimizations
-
----
-
-**Built with ❤️ for the Philippine business community**
-
-*This project demonstrates advanced blockchain development skills and full-stack application architecture.*
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

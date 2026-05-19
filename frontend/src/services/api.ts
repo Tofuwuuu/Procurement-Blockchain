@@ -166,36 +166,6 @@ export interface RecentOrder {
   total_amount: number;
 }
 
-// Blockchain Types
-export interface Block {
-  index: number;
-  timestamp: string;
-  transactions: Transaction[];
-  nonce: number;
-  previous_hash: string;
-  hash: string;
-}
-
-export interface Transaction {
-  from: string;
-  to: string;
-  amount: number;
-  action: string;
-  data?: any;
-  timestamp: string;
-}
-
-export interface Chain {
-  chain: Block[];
-  length: number;
-}
-
-export interface Peer {
-  id: string;
-  url: string;
-  is_active: boolean;
-}
-
 export interface ConnectionTarget {
   name: string;
   host: string;
@@ -308,14 +278,6 @@ export interface CreateOrderData {
     quantity: number;
     unit_price: number;
   }[];
-}
-
-export interface CreateTransactionData {
-  from: string;
-  to: string;
-  amount: number;
-  action: string;
-  data?: any;
 }
 
 // Purchase Request Types
@@ -467,52 +429,6 @@ export const apiService = {
     return response.data;
   },
   
-  getChain: async (): Promise<DashboardStats> => {
-    const response = await api.get('/chain');
-    return response.data;
-  },
-
-  // ===== BLOCKCHAIN =====
-  getBlockchain: async (): Promise<Chain> => {
-    const response = await api.get('/chain');
-    return response.data;
-  },
-
-  getBlock: async (index: number): Promise<Block> => {
-    const response = await api.get(`/chain/block/${index}`);
-    return response.data;
-  },
-
-  createTransaction: async (data: CreateTransactionData): Promise<Transaction> => {
-    const response = await api.post('/transactions/new', data);
-    return response.data;
-  },
-
-  mineBlock: async (): Promise<Block> => {
-    const response = await api.get('/mine');
-    return response.data;
-  },
-
-  // ===== PEERS =====
-  getPeers: async (): Promise<Peer[]> => {
-    const response = await api.get('/peers');
-    return response.data.peers || [];
-  },
-
-  addPeer: async (url: string): Promise<Peer> => {
-    // Parse URL to extract host and port
-    const urlObj = new URL(url);
-    const host = urlObj.hostname;
-    const port = parseInt(urlObj.port);
-    
-    const response = await api.post('/add_peer', { 
-      host, 
-      port, 
-      nodeId: `node-${Date.now()}` 
-    });
-    return response.data;
-  },
-
   // ===== CONNECTIONS =====
   getConnectionsStatus: async (): Promise<ConnectionsStatus> => {
     const response = await api.get('/api/connections');

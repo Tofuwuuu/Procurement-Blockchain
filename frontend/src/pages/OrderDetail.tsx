@@ -122,37 +122,11 @@ const OrderDetail: React.FC = () => {
       const originalStatus = order.status;
       setOrder(prev => prev ? { ...prev, status: 'Approved' as const } : null);
 
-      // Call approval API
+      // Call approval API — backend records the event on Fabric automatically
       try {
         await apiService.approveOrder(order.id);
-        
-        // Success - create blockchain transaction
-        try {
-          await apiService.createTransaction({
-            from: user.username,
-            to: 'system',
-            amount: 0,
-            action: 'approve_order',
-            data: {
-              order_id: order.id,
-              po_number: order.po_number,
-              previous_status: originalStatus,
-              new_status: 'Approved'
-            }
-          });
-          
-          // Try to mine the block
-          try {
-            await apiService.mineBlock();
-          } catch (mineError) {
-            console.log('Mining failed, but transaction was created:', mineError);
-          }
-        } catch (blockchainError) {
-          console.log('Blockchain transaction failed:', blockchainError);
-          // Continue with success since the order was approved
-        }
 
-        setToastMessage('Order approved successfully and recorded on blockchain');
+        setToastMessage('Order approved successfully');
         setToastType('success');
         setShowToast(true);
       } catch (approvalError) {

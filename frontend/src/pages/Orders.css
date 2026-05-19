@@ -10,6 +10,16 @@
   margin-bottom: 1.25rem;
 }
 
+.purchase-request-hero {
+  background:
+    radial-gradient(circle at 14% 20%, rgba(255, 255, 255, 0.42), transparent 28%),
+    linear-gradient(135deg, #f3fbf5 0%, #ffffff 56%, #eef8f1 100%);
+  border: 1px solid #dce7df;
+  border-radius: 18px;
+  box-shadow: 0 18px 42px rgba(15, 61, 24, 0.1);
+  padding: 1.35rem;
+}
+
 .orders-eyebrow {
   color: #1b5e20;
   font-size: 0.75rem;
@@ -40,6 +50,17 @@
 
 .orders-primary-action {
   min-width: 148px;
+}
+
+.orders-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
+
+.orders-secondary-action {
+  min-width: 116px;
 }
 
 .orders-stat-card,
@@ -89,6 +110,21 @@
   font-size: 1.45rem;
   font-weight: 800;
   line-height: 1.15;
+}
+
+.pr-summary-card {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.pr-summary-card .card-body {
+  min-height: 118px;
+}
+
+.pr-summary-card small {
+  color: #77867c;
+  font-size: 0.82rem;
+  font-weight: 500;
 }
 
 .orders-list-toolbar {
@@ -245,6 +281,27 @@
   margin-bottom: 0.2rem;
 }
 
+.purchase-request-register {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.purchase-request-table tbody tr {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.purchase-request-table tbody tr:hover {
+  box-shadow: inset 4px 0 0 #1b5e20;
+}
+
+.purchase-request-remark {
+  color: #7f1d1d !important;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 992px) {
   .orders-page-header,
   .orders-list-toolbar {
@@ -266,5 +323,13 @@
 
   .orders-primary-action {
     width: 100%;
+  }
+
+  .orders-secondary-action {
+    width: 100%;
+  }
+
+  .orders-header-actions {
+    justify-content: stretch;
   }
 }

@@ -23,12 +23,51 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables (optional):
+4. Set up environment variables:
 Create a `.env` file in the backend directory:
 ```env
 MONGO_URL=mongodb://localhost:27017
 DATABASE_NAME=procurement
-SECRET_KEY=your-secret-key-change-this-in-production
+FRONTEND_URL=http://localhost:3000
+JWT_SECRET=replace-with-a-random-secret-of-at-least-32-characters
+
+# Fabric CLI runtime. Use docker when running peer commands inside Fabric peer containers,
+# or local when the peer binary and MSP material are available on the backend host.
+FABRIC_PEER_CLI_MODE=docker
+FABRIC_DOCKER_BINARY=docker
+FABRIC_PEER_CLI_BINARY=peer
+FABRIC_COMMAND_TIMEOUT_SECONDS=60
+FABRIC_NETWORK_DIR=E:\Projects\BLOCKCHAIN\backend\blockchain\network
+FABRIC_CONNECTION_PROFILE=
+
+# Fabric network identity and channel settings
+FABRIC_CHANNEL_NAME=procurementchannel
+FABRIC_CHAINCODE_NAME=inspection
+FABRIC_ORDERER_ADDRESS=orderer.example.com:7050
+FABRIC_ORDERER_TLS_CA_FILE=/work/artifacts/orderer_tls_ca.crt
+FABRIC_SUBMIT_ORG=org1
+FABRIC_QUERY_ORG=org1
+
+# Submit/query peer identity. Add one FABRIC_<ORG>_* group per org used by the app.
+FABRIC_ORG1_PEER_CONTAINER=peer0.org1.example.com
+FABRIC_ORG1_LOCAL_MSP_ID=Org1MSP
+FABRIC_ORG1_TLS_ENABLED=true
+FABRIC_ORG1_TLS_ROOTCERT_FILE=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+FABRIC_ORG1_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+FABRIC_ORG1_PEER_ADDRESS=peer0.org1.example.com:7051
+
+FABRIC_ORG2_PEER_CONTAINER=peer0.org2.example.com
+FABRIC_ORG2_LOCAL_MSP_ID=Org2MSP
+FABRIC_ORG2_TLS_ENABLED=true
+FABRIC_ORG2_TLS_ROOTCERT_FILE=/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+FABRIC_ORG2_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+FABRIC_ORG2_PEER_ADDRESS=peer0.org2.example.com:9051
+
+# Endorsement peers for invoke commands and read peer for query commands.
+FABRIC_INVOKE_PEER_ADDRESSES=peer0.org1.example.com:7051,peer0.org2.example.com:9051
+FABRIC_INVOKE_TLS_ROOT_CERT_FILES=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+FABRIC_QUERY_PEER_ADDRESS=peer0.org1.example.com:7051
+FABRIC_QUERY_TLS_ROOT_CERT_FILE=/work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
 ```
 
 5. Create a test user:
@@ -45,19 +84,19 @@ python main.py
 
 Or using uvicorn directly:
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 3003
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Production Mode
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 3003
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ## API Documentation
 
 Once the server is running, you can access:
-- **Swagger UI**: http://localhost:3003/docs
-- **ReDoc**: http://localhost:3003/redoc
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## Endpoints
 
@@ -76,7 +115,7 @@ Once the server is running, you can access:
 
 ```bash
 # Login request
-curl -X POST http://localhost:3003/api/auth/login \
+curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "admin123"}'
 
@@ -96,11 +135,11 @@ curl -X POST http://localhost:3003/api/auth/login \
 }
 
 # Using the token:
-curl -X GET http://localhost:3003/api/auth/verify \
+curl -X GET http://localhost:8000/api/auth/verify \
   -H "Authorization: Bearer <your-access-token>"
 
 # Get current user:
-curl -X GET http://localhost:3003/api/auth/me \
+curl -X GET http://localhost:8000/api/auth/me \
   -H "Authorization: Bearer <your-access-token>"
 ```
 
