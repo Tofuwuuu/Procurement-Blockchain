@@ -145,17 +145,19 @@ function App() {
           } 
         />
 
-        {/* Protected Routes */}
+        {/* Root always lands in the procurement app, never a stale/default page */}
         <Route
           path="/"
           element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
+            isAuthenticated ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
+
+        {/* Protected Routes */}
 
         <Route
           path="/dashboard"
