@@ -88,12 +88,18 @@ async def get_blockchain_procurement_events(
         blockchain_client = get_blockchain_client()
         result = blockchain_client.get_all_inspections()
 
-        if result.get("success"):
-            inspections = result.get("data", [])
-            if not isinstance(inspections, list):
-                inspections = []
-            events = [_inspection_to_event(i, "fabric") for i in inspections]
-            return {"events": apply_filters(events), "total": len(events), "source": "fabric"}
+        fabric_inspections = []
+        if result.get("success") and isinstance(result.get("data"), list):
+            fabric_inspections = result["data"]
+
+        fabric_ids = set()
+        events = []
+        for inspection in fabric_inspections:
+            event = _inspection_to_event(inspection, "fabric")
+            events.append(event)
+            inspection_id = event.get("details", {}).get("inspection_id", "")
+            if inspection_id:
+                fabric_ids.add(str(inspection_id))
 
         db = await get_database()
         cursor = db.inspected.find({
@@ -105,20 +111,30 @@ async def get_blockchain_procurement_events(
             ]
         }).sort("blockchain_timestamp", -1)
         docs = await cursor.to_list(length=None)
-        events = []
         for doc in docs:
-            if "_id" in doc:
-                doc["id"] = str(doc["_id"])
-                del doc["_id"]
+            doc_id = str(doc.get("_id", ""))
+            if doc_id in fabric_ids:
+                continue
+            doc["id"] = doc_id
+            doc.pop("_id", None)
             events.append(_inspection_to_event(doc, "database_fallback"))
+
         events = apply_filters(events)
-        return {
-            "events": events,
-            "total": len(events),
-            "source": "database_fallback",
-            "warning": result.get("error",
-                                  "Fabric query failed; showing locally stored blockchain metadata"),
-        }
+        if not events:
+            return {"events": [], "total": 0, "source": "fabric"}
+
+        on_chain_count = len(fabric_ids)
+        warning = None
+        if on_chain_count < len(events):
+            warning = (
+                f"{on_chain_count} on-chain, {len(events) - on_chain_count} local-only. "
+                "Use POST /api/blockchain/inspections/sync for remaining records."
+            )
+        elif not result.get("success"):
+            warning = result.get("error", "Fabric query failed; showing locally stored blockchain metadata")
+
+        source = "fabric" if on_chain_count == len(events) else "mixed" if on_chain_count else "database_fallback"
+        return {"events": events, "total": len(events), "source": source, "warning": warning}
     except HTTPException:
         raise
     except Exception as e:
@@ -147,6 +163,53 @@ async def verify_blockchain_procurement_event(
 ):
     await get_authenticated_user_context(credentials)
     blockchain_client = get_blockchain_client()
+
+    inspection_id = event_id[5:] if event_id.startswith("INSP-") else None
+    if inspection_id:
+        result = blockchain_client.verify_inspection(inspection_id)
+        if result.get("success"):
+            return result.get("data")
+
+        err = (result.get("error") or "").lower()
+        if "channel" in err and "not found" in err:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Blockchain channel is not ready. Run the Fabric setup scripts first.",
+            )
+        if "not found" in err or "does not exist" in err:
+            db = await get_database()
+            inspected_doc = None
+            try:
+                inspected_doc = await db.inspected.find_one({"_id": ObjectId(inspection_id)})
+            except Exception:
+                inspected_doc = await db.inspected.find_one({"inspection_id": inspection_id})
+
+            if inspected_doc:
+                is_locked = bool(
+                    inspected_doc.get("locked")
+                    or inspected_doc.get("islocked")
+                    or inspected_doc.get("blockchain_recorded")
+                )
+                return {
+                    "inspectionId": inspection_id,
+                    "exists": True,
+                    "locked": is_locked,
+                    "islocked": is_locked,
+                    "txId": inspected_doc.get("blockchain_tx_id") or "pending",
+                    "timestamp": inspected_doc.get("blockchain_timestamp")
+                    or inspected_doc.get("date_created"),
+                    "historyCount": 1 if is_locked else 0,
+                    "isImmutable": is_locked,
+                    "verification": "PASS" if is_locked else "PENDING",
+                    "source": "database_fallback",
+                    "warning": "Record exists locally but is not on-chain yet. Use Sync to write it to Fabric.",
+                }
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=result.get("error", "Event not found"),
+        )
+
     result = blockchain_client.verify_procurement_event(event_id)
     if not result.get("success"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -318,6 +381,8 @@ async def sync_inspections_to_blockchain(credentials: HTTPAuthorizationCredentia
                 {"blockchain_recorded": {"$ne": True}},
                 {"blockchain_recorded": None},
                 {"blockchain_tx_id": {"$exists": False}},
+                {"blockchain_tx_id": None},
+                {"blockchain_tx_id": "pending"},
             ],
         }).sort("date_created", -1)
         reports = await cursor.to_list(length=None)

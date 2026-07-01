@@ -61,6 +61,18 @@ A full-stack procurement management platform built for Philippine government pro
 
 ### 1. Backend
 
+**Option A — Docker (recommended with Fabric)**
+
+From the project root, start MongoDB, the FastAPI backend, and the Fabric network together:
+
+```powershell
+docker compose up -d --build
+```
+
+The API is available at **http://localhost:8000** (docs at **http://localhost:8000/docs**).
+
+**Option B — Local Python**
+
 ```powershell
 cd backend
 python -m venv .venv
@@ -70,6 +82,8 @@ python main.py                       # starts on http://localhost:8000
 ```
 
 Interactive API docs are available at **http://localhost:8000/docs** once the server is running.
+
+> If you use Docker for the backend, stop any local MongoDB service on port `27017` first to avoid a port conflict.
 
 ### 2. Frontend
 
@@ -92,7 +106,7 @@ Default connection: `mongodb://localhost:27017`, database `procurement`. Overrid
 Required only for on-chain inspection recording. Follow `backend/blockchain/network/QUICK_START.md` to:
 
 1. Generate crypto material and channel artifacts
-2. Start the Docker network: `docker compose -f backend/blockchain/network/docker-compose-fabric.yml up -d`
+2. Start the full stack: `docker compose up -d --build` (Fabric + MongoDB + backend)
 3. Deploy chaincode: run `backend/blockchain/network/deploy-chaincode.ps1`
 
 The backend degrades gracefully when Fabric is unavailable — procurement data continues to save to MongoDB.

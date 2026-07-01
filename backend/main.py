@@ -15,6 +15,7 @@ if scraping_path not in sys.path:
 
 # ── Local imports ─────────────────────────────────────────────────────────────
 from database import connect_to_mongo, close_mongo_connection, get_database
+from seed import seed_default_users, seed_demo_data
 from supplier_api import router as supplier_search_router
 
 # ── Feature routers ───────────────────────────────────────────────────────────
@@ -75,6 +76,9 @@ async def audit_workflow_status_changes(request: Request, call_next):
 @app.on_event("startup")
 async def startup_event():
     await connect_to_mongo()
+    db = await get_database()
+    await seed_default_users(db)
+    await seed_demo_data(db)
 
 @app.on_event("shutdown")
 async def shutdown_event():

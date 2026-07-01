@@ -147,11 +147,35 @@
 
 /* Enhanced Badge Styles */
 .badge {
+  color: #1f2937;
   font-weight: 600;
   padding: 0.5rem 0.75rem;
   border-radius: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
+}
+
+.badge.bg-primary,
+.badge.bg-secondary,
+.badge.bg-success,
+.badge.bg-danger,
+.badge.bg-dark {
+  color: #fff !important;
+}
+
+.badge.bg-info {
+  color: #083344 !important;
+}
+
+.badge.bg-warning,
+.badge.bg-light {
+  color: #111827 !important;
+}
+
+.badge.category-badge,
+.badge.supplier-category-badge {
+  background: #dbeafe !important;
+  color: #1e40af !important;
 }
 
 .badge:hover {

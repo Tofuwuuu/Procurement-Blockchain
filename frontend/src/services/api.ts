@@ -42,9 +42,16 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Clear auth token and redirect to login
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
+      const requestUrl = error.config?.url || '';
+      const isLoginRequest = requestUrl.includes('/api/auth/login');
+
+      // Let the login form handle invalid credentials instead of hard-refreshing.
+      if (!isLoginRequest) {
+        localStorage.removeItem('authToken');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }
@@ -156,7 +163,7 @@ export interface DashboardStats {
 }
 
 export interface RecentOrder {
-  id: number;
+  id: number | string;
   po_number: string;
   supplier: {
     name: string;

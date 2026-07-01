@@ -1,7 +1,7 @@
 # Join Peers to Procurement Channel
 # Uses Admin MSP for proper authorization
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 Write-Host "========================================" -ForegroundColor Blue
 Write-Host "Joining Peers to Procurement Channel" -ForegroundColor Blue

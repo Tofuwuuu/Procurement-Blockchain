@@ -1,0 +1,13 @@
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+env
+.env
+.env.*
+*.log
+.git
+.gitignore
+blockchain/network/crypto-config
+blockchain/network/artifacts

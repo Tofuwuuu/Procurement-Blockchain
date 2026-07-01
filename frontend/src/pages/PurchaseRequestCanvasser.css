@@ -51,24 +51,30 @@
 
 .pr-stat-card {
   border-left: 4px solid #1b5e20;
+  background: linear-gradient(90deg, rgba(241, 245, 249, 0.74), #fff 44%);
 }
 
 .pr-stat-card.accent-warning {
   border-left-color: #d69e00;
+  background: linear-gradient(90deg, rgba(254, 243, 199, 0.62), #fff 44%);
 }
 
 .pr-stat-card.accent-success {
   border-left-color: #15803d;
+  background: linear-gradient(90deg, rgba(209, 250, 229, 0.58), #fff 44%);
 }
 
 .pr-stat-card.accent-primary {
   border-left-color: #0d6efd;
+  background: linear-gradient(90deg, rgba(219, 234, 254, 0.68), #fff 44%);
 }
 
 .pr-stat-card .card-body {
+  align-items: center;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0.35rem;
+  justify-content: space-between;
   min-height: 92px;
   padding: 1rem 1.1rem;
 }
@@ -81,10 +87,44 @@
 }
 
 .pr-stat-card strong {
+  display: block;
   color: #14251a;
   font-size: 1.45rem;
   font-weight: 800;
   line-height: 1.15;
+  margin-top: 0.35rem;
+}
+
+.pr-stat-icon {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce7df;
+  border-radius: 8px;
+  color: #475569;
+  display: inline-flex;
+  flex: 0 0 42px;
+  font-size: 1.25rem;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.accent-warning .pr-stat-icon {
+  background: #fef3c7;
+  border-color: #f6d56f;
+  color: #92400e;
+}
+
+.accent-success .pr-stat-icon {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.accent-primary .pr-stat-icon {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
 }
 
 .pr-list-toolbar {
@@ -133,18 +173,35 @@
 }
 
 .pr-table {
-  --bs-table-hover-bg: #f4faf5;
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: #eef8f1;
 }
 
 .pr-table thead th {
-  background: #f2f7f3;
-  border-bottom: 1px solid #dce7df;
-  color: #405246;
+  background: #edf6ef;
+  border-bottom: 2px solid #cbded1;
+  color: #263a2c;
   font-size: 0.74rem;
-  font-weight: 800;
+  font-weight: 900;
   padding: 0.85rem 1rem;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.pr-table tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.pr-table tbody tr:nth-child(odd) td {
+  background: #fff;
+}
+
+.pr-table tbody tr:hover td {
+  background: #eef8f1;
+}
+
+.pr-table tbody tr.pr-priority-row td:first-child {
+  border-left: 4px solid #d69e00;
 }
 
 .pr-table tbody td {
@@ -168,25 +225,37 @@
 }
 
 .pr-status-badge {
+  align-items: center;
   border-radius: 999px;
   box-shadow: none;
+  display: inline-flex;
   font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 76px;
   padding: 0.4rem 0.65rem;
+  justify-content: center;
+  text-shadow: none;
 }
 
 .pr-status-pending {
-  background: #fff4cc !important;
-  color: #7a5600 !important;
+  background: #fef3c7 !important;
+  color: #92400e !important;
 }
 
 .pr-status-approved {
-  background: #dcfce7 !important;
-  color: #166534 !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
 }
 
 .pr-status-completed {
-  background: #dbeafe !important;
-  color: #1d4ed8 !important;
+  background: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+.pr-status-rejected {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
 }
 
 .pr-status-draft {
@@ -195,7 +264,25 @@
 }
 
 .pr-row-action {
+  background: #fff !important;
+  border-color: #0d6efd !important;
+  color: #0d6efd !important;
+  font-weight: 700;
   min-width: 86px;
+}
+
+.pr-row-action:hover,
+.pr-row-action:focus {
+  background: #eff6ff !important;
+  border-color: #0b5ed7 !important;
+  color: #0b5ed7 !important;
+}
+
+.pr-row-action:disabled {
+  background: #fff !important;
+  border-color: #b6c7e7 !important;
+  color: #6b86b8 !important;
+  opacity: 1;
 }
 
 .pr-empty-state {

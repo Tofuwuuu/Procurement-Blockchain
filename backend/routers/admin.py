@@ -83,9 +83,9 @@ async def get_dashboard_stats(credentials: HTTPAuthorizationCredentials = Depend
                 })
         else:
             pr_docs = await db.purchase_requests.find({}).sort("date_created", -1).limit(5).to_list(5)
-            for idx, pr in enumerate(pr_docs, start=1):
+            for pr in pr_docs:
                 recent_orders.append({
-                    "id": idx,
+                    "id": pr.get("pr_number") or str(pr.get("_id")),
                     "po_number": pr.get("pr_number") or str(pr.get("_id")),
                     "supplier": {"name": get_supplier_name(pr)},
                     "date_created": fmt(pr.get("date_created") or pr.get("date")),

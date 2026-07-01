@@ -1,3 +1,5 @@
+# Full stack (Fabric + MongoDB + backend): run from project root
+#   docker compose up -d --build
 services:
   # Orderer Service
   orderer.example.com:

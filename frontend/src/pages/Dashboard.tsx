@@ -203,7 +203,7 @@ const Dashboard: React.FC = () => {
                             <Button
                               className="btn-table-action"
                               size="sm"
-                              onClick={() => navigate(`/orders/${order.id}`)}
+                              onClick={() => navigate(`/orders/${order.po_number}`)}
                               aria-label={`View ${order.po_number}`}
                             >
                               <i className="bi bi-eye me-1"></i>

@@ -1,7 +1,7 @@
 # Complete Blockchain Setup Script
 # Creates channel, joins peers, and deploys chaincode
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 Write-Host "========================================" -ForegroundColor Blue
 Write-Host "Complete Blockchain Setup" -ForegroundColor Blue

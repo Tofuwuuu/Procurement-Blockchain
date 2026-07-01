@@ -8,6 +8,8 @@ Write-Host "Hyperledger Fabric Network Setup" -ForegroundColor Blue
 Write-Host "========================================" -ForegroundColor Blue
 
 $networkDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Resolve-Path (Join-Path $networkDir "..\..\..")
+$composeFile = Join-Path $projectRoot "docker-compose.yml"
 Set-Location $networkDir
 
 $fabricContainerNames = @(
@@ -120,7 +122,7 @@ Write-Host "[OK] Genesis block generated" -ForegroundColor Green
 
 # Step 4: Stop any existing containers
 Write-Host "`n[4/5] Stopping existing containers..." -ForegroundColor Yellow
-$composeDownExitCode = Invoke-DockerCli -Arguments @("compose", "-f", "docker-compose-fabric.yml", "down", "-v") -Quiet
+$composeDownExitCode = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "down", "-v") -Quiet
 if ($composeDownExitCode -ne 0) {
     Write-Host "[ERROR] Failed to stop existing containers!" -ForegroundColor Red
     exit 1
@@ -138,8 +140,8 @@ foreach ($containerName in $fabricContainerNames) {
 Write-Host "[OK] Containers stopped" -ForegroundColor Green
 
 # Step 5: Start the network
-Write-Host "`n[5/5] Starting Fabric network..." -ForegroundColor Yellow
-$composeUpExitCode = Invoke-DockerCli -Arguments @("compose", "-f", "docker-compose-fabric.yml", "up", "-d")
+Write-Host "`n[5/5] Starting Fabric network, MongoDB, and backend..." -ForegroundColor Yellow
+$composeUpExitCode = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "up", "-d", "--build")
 
 if ($composeUpExitCode -ne 0) {
     Write-Host "[ERROR] Failed to start containers!" -ForegroundColor Red
@@ -154,7 +156,7 @@ Write-Host "`nWaiting for containers to start..." -ForegroundColor Yellow
 Start-Sleep -Seconds 5
 
 Write-Host "`nContainer Status:" -ForegroundColor Cyan
-$composePsExitCode = Invoke-DockerCli -Arguments @("compose", "-f", "docker-compose-fabric.yml", "ps")
+$composePsExitCode = Invoke-DockerCli -Arguments @("compose", "-f", $composeFile, "ps")
 if ($composePsExitCode -ne 0) {
     Write-Host "[WARN] Failed to read container status." -ForegroundColor Yellow
 }
@@ -163,6 +165,10 @@ Write-Host "`nTo check logs:" -ForegroundColor Yellow
 Write-Host "  docker logs orderer.example.com" -ForegroundColor White
 Write-Host "  docker logs peer0.org1.example.com" -ForegroundColor White
 Write-Host "  docker logs peer0.org2.example.com" -ForegroundColor White
+Write-Host "  docker logs procurement-backend" -ForegroundColor White
 
-Write-Host "`nTo stop the network:" -ForegroundColor Yellow
-Write-Host "  docker compose -f docker-compose-fabric.yml down" -ForegroundColor White
+Write-Host "`nBackend API:" -ForegroundColor Yellow
+Write-Host "  http://localhost:8000/docs" -ForegroundColor White
+
+Write-Host "`nTo stop the stack:" -ForegroundColor Yellow
+Write-Host "  docker compose -f docker-compose.yml down" -ForegroundColor White

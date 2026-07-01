@@ -1,0 +1,74 @@
+include:
+  - path: backend/blockchain/network/docker-compose-fabric.yml
+
+services:
+  backend:
+    container_name: procurement-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Use the host MongoDB (Compass / local install), not the empty Docker volume.
+      MONGO_URL: mongodb://host.docker.internal:27017
+      DATABASE_NAME: procurement
+      FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: dev-jwt-secret-replace-in-production-32chars
+
+      FABRIC_PEER_CLI_MODE: docker
+      FABRIC_DOCKER_BINARY: docker
+      FABRIC_PEER_CLI_BINARY: peer
+      FABRIC_COMMAND_TIMEOUT_SECONDS: "60"
+      FABRIC_CONNECTION_PROFILE: ""
+
+      FABRIC_CHANNEL_NAME: procurementchannel
+      FABRIC_CHAINCODE_NAME: inspection
+      FABRIC_ORDERER_ADDRESS: orderer.example.com:7050
+      FABRIC_ORDERER_TLS_CA_FILE: /work/artifacts/orderer_tls_ca.crt
+      FABRIC_SUBMIT_ORG: org1
+      FABRIC_QUERY_ORG: org1
+
+      FABRIC_ORG1_PEER_CONTAINER: peer0.org1.example.com
+      FABRIC_ORG1_LOCAL_MSP_ID: Org1MSP
+      FABRIC_ORG1_TLS_ENABLED: "true"
+      FABRIC_ORG1_TLS_ROOTCERT_FILE: /work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+      FABRIC_ORG1_MSPCONFIGPATH: /work/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+      FABRIC_ORG1_PEER_ADDRESS: peer0.org1.example.com:7051
+
+      FABRIC_ORG2_PEER_CONTAINER: peer0.org2.example.com
+      FABRIC_ORG2_LOCAL_MSP_ID: Org2MSP
+      FABRIC_ORG2_TLS_ENABLED: "true"
+      FABRIC_ORG2_TLS_ROOTCERT_FILE: /work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+      FABRIC_ORG2_MSPCONFIGPATH: /work/crypto-config/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+      FABRIC_ORG2_PEER_ADDRESS: peer0.org2.example.com:9051
+
+      FABRIC_INVOKE_PEER_ADDRESSES: peer0.org1.example.com:7051,peer0.org2.example.com:9051
+      FABRIC_INVOKE_TLS_ROOT_CERT_FILES: /work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt,/work/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+      FABRIC_QUERY_PEER_ADDRESS: peer0.org1.example.com:7051
+      FABRIC_QUERY_TLS_ROOT_CERT_FILE: /work/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      peer0.org1.example.com:
+        condition: service_started
+    networks:
+      - app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+networks:
+  app:
+    name: procurement-app
+    driver: bridge

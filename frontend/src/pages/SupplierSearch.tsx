@@ -294,8 +294,34 @@ const SupplierSearch: React.FC = () => {
 
   const statusLabel = (result: SearchResult) => {
     if (!result.isValidSupplier) return 'Unsupported';
-    if (!result.priceFound) return 'Needs price';
-    return 'Needs validation';
+    if ((result.confidence || 0) > 70 && result.priceFound) return 'Validated';
+    return 'Needs Validation';
+  };
+
+  const qualityClass = (result: SearchResult) => {
+    if (!result.isValidSupplier) return 'unsupported';
+    if ((result.confidence || 0) > 70 && result.priceFound) return 'validated';
+    return 'needs-validation';
+  };
+
+  const qualityIcon = (result: SearchResult) => {
+    if (!result.isValidSupplier) return 'bi-x-circle-fill';
+    if ((result.confidence || 0) > 70 && result.priceFound) return 'bi-check-circle-fill';
+    return 'bi-exclamation-triangle-fill';
+  };
+
+  const confidenceClass = (confidence?: number) => {
+    if (typeof confidence !== 'number') return 'unknown';
+    if (confidence < 30) return 'low';
+    if (confidence <= 70) return 'medium';
+    return 'high';
+  };
+
+  const sourceClass = (sourceType?: string) => {
+    const normalized = (sourceType || '').toLowerCase();
+    if (normalized.includes('supplier') || normalized.includes('website')) return 'supplier';
+    if (normalized.includes('reference')) return 'reference';
+    return 'neutral';
   };
 
   const filteredResults = useMemo(
@@ -321,6 +347,8 @@ const SupplierSearch: React.FC = () => {
   const selectedPRCount = approvedPRs.filter(pr => pr.selected).length;
   const validVisibleResults = filteredResults.filter((result) => result.isValidSupplier);
   const allVisibleSelected = validVisibleResults.length > 0 && validVisibleResults.every(r => r.selected);
+  const unsupportedCount = filteredResults.filter((result) => !result.isValidSupplier).length;
+  const unsupportedRatio = filteredResults.length > 0 ? unsupportedCount / filteredResults.length : 0;
 
   return (
     <Container fluid className="supplier-search-page py-4">
@@ -485,30 +513,33 @@ const SupplierSearch: React.FC = () => {
                 </div>
               )}
 
+              {!loadingResults && unsupportedRatio >= 0.5 && filteredResults.length > 0 && (
+                <div className="supplier-validation-note" role="status">
+                  <i className="bi bi-exclamation-triangle"></i>
+                  <span>
+                    Many results are reference-only or low-confidence. Unsupported sources require manual verification before they can be used in a quotation.
+                  </span>
+                </div>
+              )}
+
               {/* Results Table */}
               {!loadingResults && (
-              <div className="table-responsive">
+              <div className="table-responsive supplier-results-scroll">
                 <Table hover className="supplier-results-table mb-0">
                   <thead>
                     <tr>
                       <th style={{ width: '5%' }}>No.</th>
-                      <th style={{ width: '14%' }}>
-                        Category
-                      </th>
-                      <th style={{ width: '22%' }}>
-                        Item Description
+                      <th style={{ width: '31%' }}>
+                        Supplier / Item
                       </th>
                       <th style={{ width: '12%' }}>
                         Unit Price
                       </th>
-                      <th style={{ width: '20%' }}>
-                        Supplier
+                      <th style={{ width: '25%' }}>
+                        Source & Category
                       </th>
-                      <th style={{ width: '14%' }}>
-                        Source
-                      </th>
-                      <th style={{ width: '13%' }}>
-                        Quality
+                      <th style={{ width: '17%' }}>
+                        Quality & Confidence
                       </th>
                       <th style={{ width: '10%' }}>
                         <Form.Check
@@ -516,8 +547,8 @@ const SupplierSearch: React.FC = () => {
                           checked={allVisibleSelected}
                           disabled={validVisibleResults.length === 0}
                           onChange={(e) => handleSelectAll(e.target.checked)}
-                          label="Select visible"
-                          className="mb-0"
+                          label="Add to Canvass"
+                          className="supplier-select-all mb-0"
                         />
                       </th>
                     </tr>
@@ -525,7 +556,7 @@ const SupplierSearch: React.FC = () => {
                   <tbody>
                     {paginatedResults.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="supplier-empty-state">
+                        <td colSpan={6} className="supplier-empty-state">
                           <i className="bi bi-search"></i>
                           <strong>No supplier results found</strong>
                           <span>Try another URL, approved PR, or result filter.</span>
@@ -535,36 +566,66 @@ const SupplierSearch: React.FC = () => {
                       paginatedResults.map((result) => (
                         <tr key={result.id || result.no} className={result.selected ? 'selected-row' : ''}>
                           <td>{result.no}</td>
-                          <td><Badge className="supplier-category-badge">{result.category}</Badge></td>
-                          <td className="supplier-item-cell">{result.itemDescription}</td>
-                          <td className="supplier-price-cell">{formatCurrency(result.unitPrice)}</td>
                           <td className="supplier-name-cell">
-                            <span>{result.supplierName}</span>
-                            {result.extractionWarning && (
-                              <small title={result.extractionWarning}>{result.extractionWarning}</small>
-                            )}
+                            <div className="supplier-primary-line">
+                              <span>{result.supplierName}</span>
+                              {result.extractionWarning && (
+                                <button
+                                  type="button"
+                                  className="supplier-info-button"
+                                  title={result.extractionWarning}
+                                  aria-label="Source note"
+                                >
+                                  <i className="bi bi-info-circle"></i>
+                                </button>
+                              )}
+                            </div>
+                            <small className="supplier-item-cell">{result.itemDescription}</small>
                           </td>
+                          <td className="supplier-price-cell">{formatCurrency(result.unitPrice)}</td>
                           <td className="supplier-source-cell">
-                            <Badge className={`supplier-source-badge ${result.isValidSupplier ? 'supported' : 'unsupported'}`}>
-                              {result.sourceType || 'Unknown'}
-                            </Badge>
-                            <span title={result.url}>{getHostName(result.url)}</span>
+                            <div className="supplier-badge-row">
+                              <Badge className="supplier-category-badge">{result.category}</Badge>
+                              <Badge className={`supplier-source-badge ${sourceClass(result.sourceType)}`}>
+                                {result.sourceType || 'Unknown'}
+                              </Badge>
+                            </div>
+                            <span className="supplier-host" title={result.url}>{getHostName(result.url)}</span>
                           </td>
                           <td>
-                            <Badge className={`supplier-quality-badge ${result.isValidSupplier ? 'review' : 'blocked'}`}>
+                            <div className="supplier-quality-stack">
+                            <Badge className={`supplier-quality-badge ${qualityClass(result)}`}>
+                              <i className={`bi ${qualityIcon(result)}`}></i>
                               {statusLabel(result)}
                             </Badge>
                             {typeof result.confidence === 'number' && (
-                              <small className="supplier-confidence">{result.confidence}% confidence</small>
+                              <span className={`supplier-confidence-chip ${confidenceClass(result.confidence)}`}>
+                                <span style={{ width: `${Math.max(4, Math.min(100, result.confidence))}%` }}></span>
+                                <strong>{result.confidence}%</strong>
+                              </span>
                             )}
+                            </div>
                           </td>
-                          <td className="text-center">
-                            <Form.Check
-                              type="checkbox"
-                              checked={result.selected}
-                              disabled={!result.isValidSupplier}
-                              onChange={() => handleSelectRow(result)}
-                            />
+                          <td className="supplier-select-cell">
+                            <div className="supplier-select-controls">
+                              <Form.Check
+                                type="checkbox"
+                                checked={result.selected}
+                                disabled={!result.isValidSupplier}
+                                onChange={() => handleSelectRow(result)}
+                                className="supplier-row-check"
+                              />
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                className="supplier-row-select"
+                                disabled={!result.isValidSupplier}
+                                onClick={() => handleSelectRow(result)}
+                                title={!result.isValidSupplier ? 'Unsupported sources require manual verification first.' : undefined}
+                              >
+                                {result.selected ? 'Selected' : 'Select'}
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))

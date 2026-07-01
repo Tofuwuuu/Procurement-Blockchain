@@ -64,12 +64,49 @@ const PurchaseRequestCanvasser: React.FC = () => {
     const statusConfig: Record<string, { className: string; text: string }> = {
       Pending: { className: 'pr-status-badge pr-status-pending', text: 'Pending' },
       Approved: { className: 'pr-status-badge pr-status-approved', text: 'Approved' },
+      Rejected: { className: 'pr-status-badge pr-status-rejected', text: 'Rejected' },
       Draft: { className: 'pr-status-badge pr-status-draft', text: 'Draft' },
       Completed: { className: 'pr-status-badge pr-status-completed', text: 'Completed' },
     };
-    const config = statusConfig[status] || { className: 'pr-status-badge pr-status-draft', text: status };
+    const normalizedStatus = status?.trim();
+    const statusKey = Object.keys(statusConfig).find(
+      (key) => key.toLowerCase() === normalizedStatus?.toLowerCase()
+    );
+    const config = (statusKey && statusConfig[statusKey]) || { className: 'pr-status-badge pr-status-draft', text: status };
     return <Badge className={config.className}>{config.text}</Badge>;
   };
+
+  const demoRequestProfiles = [
+    { requester: 'Maria Santos', office: 'IT Department' },
+    { requester: 'Jose Reyes', office: 'Finance Office' },
+    { requester: 'Ana Lim', office: 'Procurement Office' },
+    { requester: 'Carlo Mendoza', office: 'Engineering Division' },
+    { requester: 'Liza Garcia', office: 'Training and Development' },
+    { requester: 'Ramon Cruz', office: 'Facilities Management' },
+    { requester: 'Elena Navarro', office: 'Laboratory Services' },
+    { requester: 'Miguel Torres', office: 'Operations Office' },
+    { requester: 'Patricia Villanueva', office: 'Administrative Services' },
+    { requester: 'Daniel Aquino', office: 'Supply Management' },
+    { requester: 'Grace Fernandez', office: 'Records Section' },
+    { requester: 'Nico Bautista', office: 'Budget Office' },
+    { requester: 'Irene Castillo', office: 'General Services' },
+  ];
+
+  const isSeedPlaceholder = (value?: string) =>
+    ['seeder script', 'employee user', 'canvasser', 'general'].includes((value || '').trim().toLowerCase());
+
+  const getDisplayProfile = (req: PurchaseRequest, index: number) => {
+    const prSequence = Number(req.pr_number?.match(/(\d+)$/)?.[1]);
+    const seedProfile = demoRequestProfiles[((Number.isFinite(prSequence) ? prSequence : index + 1) - 1) % demoRequestProfiles.length];
+    const requester = req.requested_by || req.entity_name;
+    return {
+      requester: isSeedPlaceholder(requester) ? seedProfile.requester : requester,
+      office: isSeedPlaceholder(req.office_section) ? seedProfile.office : req.office_section,
+    };
+  };
+
+  const isPriorityRequest = (req: PurchaseRequest) =>
+    req.remark?.toLowerCase().includes('urgent') || (req.status === 'Pending' && (req.total_amount || 0) >= 50000);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
@@ -258,32 +295,52 @@ const PurchaseRequestCanvasser: React.FC = () => {
         <Col sm={6} lg={3}>
           <Card className="pr-stat-card">
             <Card.Body>
-              <span className="pr-stat-label">Total Requests</span>
-              <strong>{requestStats.total}</strong>
+              <div>
+                <span className="pr-stat-label">Total Requests</span>
+                <strong>{requestStats.total}</strong>
+              </div>
+              <span className="pr-stat-icon" aria-hidden="true">
+                <i className="bi bi-file-earmark-text"></i>
+              </span>
             </Card.Body>
           </Card>
         </Col>
         <Col sm={6} lg={3}>
           <Card className="pr-stat-card accent-warning">
             <Card.Body>
-              <span className="pr-stat-label">Pending</span>
-              <strong>{requestStats.pending}</strong>
+              <div>
+                <span className="pr-stat-label">Pending</span>
+                <strong>{requestStats.pending}</strong>
+              </div>
+              <span className="pr-stat-icon" aria-hidden="true">
+                <i className="bi bi-clock-history"></i>
+              </span>
             </Card.Body>
           </Card>
         </Col>
         <Col sm={6} lg={3}>
           <Card className="pr-stat-card accent-success">
             <Card.Body>
-              <span className="pr-stat-label">Approved</span>
-              <strong>{requestStats.approved}</strong>
+              <div>
+                <span className="pr-stat-label">Approved</span>
+                <strong>{requestStats.approved}</strong>
+              </div>
+              <span className="pr-stat-icon" aria-hidden="true">
+                <i className="bi bi-check2-circle"></i>
+              </span>
             </Card.Body>
           </Card>
         </Col>
         <Col sm={6} lg={3}>
           <Card className="pr-stat-card accent-primary">
             <Card.Body>
-              <span className="pr-stat-label">Total Value</span>
-              <strong>{formatCurrency(requestStats.totalAmount)}</strong>
+              <div>
+                <span className="pr-stat-label">Total Value</span>
+                <strong>{formatCurrency(requestStats.totalAmount)}</strong>
+              </div>
+              <span className="pr-stat-icon" aria-hidden="true">
+                <i className="bi bi-currency-exchange"></i>
+              </span>
             </Card.Body>
           </Card>
         </Col>
@@ -345,12 +402,14 @@ const PurchaseRequestCanvasser: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRequests.map((req) => (
-                    <tr key={req.id}>
+                  filteredRequests.map((req, index) => {
+                    const displayProfile = getDisplayProfile(req, index);
+                    return (
+                    <tr key={req.id} className={isPriorityRequest(req) ? 'pr-priority-row' : undefined}>
                       <td>{getStatusBadge(req.status)}</td>
                       <td className="fw-semibold text-nowrap">{req.pr_number}</td>
-                      <td>{req.requested_by || req.entity_name}</td>
-                      <td>{req.office_section}</td>
+                      <td>{displayProfile.requester}</td>
+                      <td>{displayProfile.office}</td>
                       <td className="text-nowrap">{formatDate(req.date_created)}</td>
                       <td className="pr-amount">{formatCurrency(req.total_amount || 0)}</td>
                       <td className="pr-remark">{req.remark || 'No remarks'}</td>
@@ -367,7 +426,8 @@ const PurchaseRequestCanvasser: React.FC = () => {
                         </Button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </Table>

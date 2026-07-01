@@ -183,6 +183,36 @@ footer {
   color: #314238;
 }
 
+.admin-footer {
+  background: #fbfdfc;
+  color: #526259;
+  font-size: 0.86rem;
+  padding: 0.8rem 0;
+}
+
+.admin-footer-content {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  justify-content: center;
+}
+
+.admin-footer-content span {
+  align-items: center;
+  display: inline-flex;
+}
+
+.admin-footer-content span + span::before {
+  background: #b7c8bd;
+  border-radius: 999px;
+  content: "";
+  display: inline-block;
+  height: 4px;
+  margin-right: 1rem;
+  width: 4px;
+}
+
 footer h5 {
   color: #1b5e20;
   font-weight: 700;

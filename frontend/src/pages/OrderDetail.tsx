@@ -37,8 +37,12 @@ const OrderDetail: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // For employee/canvasser we use purchase requests (real-time)
-      if (user?.role === 'employee' || user?.role === 'canvasser') {
+      // Purchase requests use pr_number in the URL (e.g. PR-2026-013)
+      if (
+        user?.role === 'employee' ||
+        user?.role === 'canvasser' ||
+        id?.startsWith('PR-')
+      ) {
         let pr: PurchaseRequest | null = null;
         try {
           // id for these roles is the pr_number (e.g., PR-...)

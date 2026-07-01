@@ -547,31 +547,41 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </main>
 
       {/* Footer */}
-      <footer role="contentinfo" className="site-footer py-4 mt-auto">
+      <footer role="contentinfo" className={`site-footer mt-auto ${user?.is_admin ? 'admin-footer' : 'py-4'}`}>
         <Container>
-          <div className="row">
-            <div className="col-md-4">
-              <h5>Philippine Procurement Solutions</h5>
-              <p className="mb-0">123 Ayala Avenue, Makati City, Philippines</p>
-              <p className="mb-0">BIR TIN: 123-456-789-000</p>
+          {user?.is_admin ? (
+            <div className="admin-footer-content">
+              <span>PAMS Admin Console v1.0.0</span>
+              <span>Secure procurement workspace</span>
+              <span>Support: procurement@example.com</span>
             </div>
-            <div className="col-md-4">
-              <h5>Legal Compliance</h5>
-              <ul className="list-unstyled">
-                <li><span className="footer-link-text">Philippine Procurement Law</span></li>
-                <li><span className="footer-link-text">BIR Regulations</span></li>
-              </ul>
-            </div>
-            <div className="col-md-4">
-              <h5>Contact Us</h5>
-              <p className="mb-0">Email: procurement@example.com</p>
-              <p className="mb-0">Phone: +63 2 1234 5678</p>
-            </div>
-          </div>
-          <hr />
-          <p className="text-center mb-0">
-            &copy; {new Date().getFullYear()} Philippine Procurement Solutions. All rights reserved.
-          </p>
+          ) : (
+            <>
+              <div className="row">
+                <div className="col-md-4">
+                  <h5>Philippine Procurement Solutions</h5>
+                  <p className="mb-0">123 Ayala Avenue, Makati City, Philippines</p>
+                  <p className="mb-0">BIR TIN: 123-456-789-000</p>
+                </div>
+                <div className="col-md-4">
+                  <h5>Legal Compliance</h5>
+                  <ul className="list-unstyled">
+                    <li><span className="footer-link-text">Philippine Procurement Law</span></li>
+                    <li><span className="footer-link-text">BIR Regulations</span></li>
+                  </ul>
+                </div>
+                <div className="col-md-4">
+                  <h5>Contact Us</h5>
+                  <p className="mb-0">Email: procurement@example.com</p>
+                  <p className="mb-0">Phone: +63 2 1234 5678</p>
+                </div>
+              </div>
+              <hr />
+              <p className="text-center mb-0">
+                &copy; {new Date().getFullYear()} Philippine Procurement Solutions. All rights reserved.
+              </p>
+            </>
+          )}
         </Container>
       </footer>
     </div>
