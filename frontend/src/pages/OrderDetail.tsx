@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container, Row, Col, Card, Table, Badge, Button, 
-  Modal, Alert, Spinner, ButtonGroup
+  Modal, Alert, Spinner
 } from 'react-bootstrap';
 import { apiService, PurchaseOrder, PurchaseRequest } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +30,7 @@ const OrderDetail: React.FC = () => {
     if (id) {
       fetchOrderDetails();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchOrderDetails = async () => {

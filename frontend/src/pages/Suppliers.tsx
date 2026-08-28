@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Container, Row, Col, Card, Table, Button, Badge, 
-  Form, Modal, Alert, Spinner, InputGroup 
+  Form, Modal, InputGroup 
 } from 'react-bootstrap';
 import { apiService, Supplier, CreateSupplierData } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -193,10 +193,6 @@ const Suppliers: React.FC = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     resetForm();
-  };
-
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-PH');
   };
 
   const filteredSuppliers = suppliers.filter(supplier =>

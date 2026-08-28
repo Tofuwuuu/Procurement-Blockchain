@@ -28,13 +28,6 @@ interface AuditLog {
   created_at: string;
 }
 
-interface AuditLogsResponse {
-  logs: AuditLog[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
 const AuditLogs: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +46,7 @@ const AuditLogs: React.FC = () => {
 
   useEffect(() => {
     fetchAuditLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, filters]);
 
   const fetchAuditLogs = async () => {

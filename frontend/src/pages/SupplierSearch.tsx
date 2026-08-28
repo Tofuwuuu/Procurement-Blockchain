@@ -57,6 +57,7 @@ const SupplierSearch: React.FC = () => {
   useEffect(() => {
     loadSavedResults();
     loadApprovedPurchaseRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSavedResults = async () => {

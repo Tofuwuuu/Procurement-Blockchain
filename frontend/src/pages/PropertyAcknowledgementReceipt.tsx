@@ -52,6 +52,7 @@ const PropertyAcknowledgementReceipt: React.FC = () => {
 
   useEffect(() => {
     fetchInspected();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchInspected = async () => {
