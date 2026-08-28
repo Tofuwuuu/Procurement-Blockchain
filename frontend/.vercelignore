@@ -1,0 +1,8 @@
+# Legacy Flask/Jinja files — not part of the React SPA deploy
+requirements.txt
+*.py
+templates/
+dev_app.py
+forms.py
+config.py
+__init__.py
